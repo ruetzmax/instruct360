@@ -1,0 +1,74 @@
+import numpy as np
+from groundingdino.util.inference import load_model, predict
+import groundingdino.datasets.transforms as T
+from typing import Tuple
+from PIL import Image
+from py360convert import e2p
+
+
+class ImageChunk:
+    def __init__(self, image: np.array, center: Tuple[float, float], angle: Tuple[float, float], fov: Tuple[float, float]):
+        self.image = image
+        self.center = center
+        self.angle = angle
+        self.fov = fov
+
+def _image_to_tensor(image):
+    transform = T.Compose(
+        [
+            T.RandomResize([800], max_size=1333),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
+    
+    if not isinstance(image, Image.Image):
+        image = Image.fromarray(np.asarray(image))
+        
+    image_transformed, _ = transform(image, None)
+    return image_transformed
+
+def get_bounding_boxes(image, prompt):
+    model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
+
+    image_tensor = _image_to_tensor(image)
+    
+    boxes, logits, phrases = predict(
+        model=model,
+        image=image_tensor,
+        caption=prompt,
+        box_threshold=0.35,
+        text_threshold=0.25,
+        device="cpu"
+    )
+
+    return boxes.numpy()
+
+def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700)):
+    # create an ImageChunk for each bounding box
+    image_chunks = []
+    h, w, _ = image.shape
+    for box in bounding_boxes:
+        # box format: [0,1](cx, cy, w, h)
+        box_center_pixel = (int(box[0] * w), int(box[1] * h))
+        chunk_center_pixel = box_center_pixel
+        
+        #convert chunk center to normalized coordinates
+        chunk_center_normalized = (chunk_center_pixel[0] / w, chunk_center_pixel[1] / h)
+        
+        #calculate angle from image center
+        angle_horizontal_rad = (chunk_center_normalized[0] - 0.5) * 2 * np.pi
+        angle_vertical_rad = (0.5 - chunk_center_normalized[1]) * np.pi
+        angle = (angle_horizontal_rad, angle_vertical_rad)
+
+        # calculate fov
+        fov_x = 360 * (chunk_size[0] / w)
+        fov_y = 180 * (chunk_size[1] / h)
+        fov = (fov_x, fov_y)
+        
+        # extract image chunk by projecting equirectangular to perspective
+        image_chunk = e2p(image, fov_deg=(fov_x, fov_y), u_deg=np.degrees(angle_horizontal_rad), v_deg=np.degrees(angle_vertical_rad), out_hw=chunk_size)
+        
+        image_chunks.append(ImageChunk(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov))
+    
+    return image_chunks
