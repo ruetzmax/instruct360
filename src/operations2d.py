@@ -12,6 +12,7 @@ class ImageChunk:
         self.center = center
         self.angle = angle
         self.fov = fov
+        
 
 def _image_to_tensor(image):
     transform = T.Compose(
@@ -28,7 +29,7 @@ def _image_to_tensor(image):
     image_transformed, _ = transform(image, None)
     return image_transformed
 
-def get_bounding_boxes(image, prompt):
+def get_2d_bounding_boxes(image, prompt):
     model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
 
     image_tensor = _image_to_tensor(image)
