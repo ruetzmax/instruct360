@@ -1,5 +1,6 @@
 import cv2 as cv
 import matplotlib.pyplot as plt
+import open3d
 import torch
 from torchvision.ops import box_convert
 import numpy as np
@@ -8,6 +9,10 @@ from src.operations2d import ImageChunk
 from src.operations3d import get_intrinsics_for_chunk
 
 from ovmono3d.cubercnn import util, vis
+
+from open3d.visualization import draw_geometries
+
+import plotly.graph_objects as go
 
 
 def read_video_frames(video_path):
@@ -64,3 +69,54 @@ def display_image(image):
     plt.imshow(image)
     plt.axis('off')
     plt.show()
+    
+def get_character_placeholder(scale = 0.5):
+    # get open3d mesh of rectangular character placeholder
+    width = 0.5 * scale
+    height = 1.8 * scale
+    depth = 0.5 * scale
+    
+    character_placeholder = open3d.geometry.OrientedBoundingBox(
+        center=[0, height / 2, 0],
+        R=np.eye(3),
+        extent=[width, height, depth]
+    )
+    character_placeholder = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(character_placeholder)
+    
+    return character_placeholder
+    
+def _mesh_to_plotly(mesh):
+    # transpose z and y axes and flip y to match Open3D coords
+    mesh.vertices = open3d.utility.Vector3dVector(np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, 1])
+    
+    triangles = np.asarray(mesh.triangles)
+    vertices = np.asarray(mesh.vertices)
+    colors = np.asarray(mesh.vertex_colors)
+    
+    plotly_mesh = go.Mesh3d(
+            x=vertices[:,0],
+            y=vertices[:,1],
+            z=vertices[:,2],
+            i=triangles[:,0],
+            j=triangles[:,1],
+            k=triangles[:,2],
+            vertexcolor=colors,
+            opacity=0.50)
+    
+    return plotly_mesh
+
+def render_scene(meshes):
+    plotly_meshes = [_mesh_to_plotly(mesh) for mesh in meshes]
+    fig = go.Figure(
+        data=[*plotly_meshes],
+        layout=dict(
+            scene=dict(
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                zaxis=dict(visible=False)
+            )
+        )
+    )
+    fig.show()
+        
+    

@@ -1,5 +1,5 @@
+import open3d
 from src.operations2d import ImageChunk
-
 import logging
 import os
 import sys
@@ -106,3 +106,53 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str):
         return centers, dimensions, poses
     finally:
         os.chdir(original_dir)
+        
+def adjust_centers_by_chunk_rotation(centers, chunk: ImageChunk):
+    rotated_centers = []
+    
+    angle_horizontal_rad, angle_vertical_rad = chunk.angle
+    rotation = np.array([
+        [np.cos(angle_horizontal_rad), -np.sin(angle_horizontal_rad), 0],
+        [np.sin(angle_horizontal_rad), np.cos(angle_horizontal_rad), 0],
+        [0, 0, 1]
+    ])
+    for center in centers:
+        rotated_center = rotation @ center.T
+        rotated_centers.append(rotated_center)
+        
+    return rotated_centers
+
+def _torch_mesh_to_open3d(torch_mesh):
+    verts = torch_mesh.verts_packed().detach().cpu().numpy()
+    faces = torch_mesh.faces_packed().detach().cpu().numpy()
+    
+    o3d_mesh = open3d.geometry.TriangleMesh()
+    o3d_mesh.vertices = open3d.utility.Vector3dVector(verts)
+    o3d_mesh.triangles = open3d.utility.Vector3iVector(faces)
+    
+    if torch_mesh.textures is not None and hasattr(torch_mesh.textures, 'verts_features_packed'):
+        colors = torch_mesh.textures.verts_features_packed().detach().cpu().numpy()
+        if colors.max() > 1.0:
+            colors = colors / 255.0
+        o3d_mesh.vertex_colors = open3d.utility.Vector3dVector(colors[:, :3])
+    
+    o3d_mesh.compute_vertex_normals()
+    
+    return o3d_mesh
+
+def get_box_meshes(centers, dimensions, poses, color=(0, 0, 255)):
+    meshes = []
+    for box_idx in range(len(centers)):
+        center = centers[box_idx].flatten().tolist() if isinstance(centers[box_idx], np.ndarray) else list(centers[box_idx])
+        dimension = dimensions[box_idx].flatten().tolist() if isinstance(dimensions[box_idx], np.ndarray) else list(dimensions[box_idx])
+        bbox3d = center + dimension
+        
+        pose = poses[box_idx]
+        if isinstance(pose, np.ndarray):
+            pose = np.squeeze(pose).tolist()
+        
+        mesh = util.mesh_cuboid(bbox3d, pose, color=color)
+        mesh = _torch_mesh_to_open3d(mesh)
+        meshes.append(mesh)
+    return meshes
+        
