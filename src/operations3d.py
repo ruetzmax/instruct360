@@ -67,7 +67,7 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
     
     return K
 
-def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str):
+def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
     
     # change directory to ovmono3d during model loading and inference
     original_dir = os.getcwd()
@@ -96,7 +96,7 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str):
         centers, dimensions, poses = [], [], []
         for pred_idx in range(len(predictions)):
             pred = predictions[pred_idx]
-            if pred.scores.item() < 0.3:
+            if pred.scores.item() < threshold:
                 continue
             
             centers.append(pred.pred_center_cam.detach().numpy())
@@ -140,7 +140,8 @@ def _torch_mesh_to_open3d(torch_mesh):
     
     return o3d_mesh
 
-def get_box_meshes(centers, dimensions, poses, color=(0, 0, 255)):
+def get_box_meshes(boxes, color=(0, 0, 255)):
+    centers, dimensions, poses = boxes
     meshes = []
     for box_idx in range(len(centers)):
         center = centers[box_idx].flatten().tolist() if isinstance(centers[box_idx], np.ndarray) else list(centers[box_idx])

@@ -41,6 +41,12 @@ def draw_bounding_box(image, box, color=(255, 0, 0), thickness=2):
     cv.rectangle(image_with_box, (x1, y1), (x2, y2), color, thickness)
     return image_with_box
 
+def draw_bounding_boxes(image, boxes, color=(255, 0, 0), thickness=2):
+    image_with_boxes = image.copy()
+    for box in boxes:
+        image_with_boxes = draw_bounding_box(image_with_boxes, box, color=color, thickness=thickness)
+    return image_with_boxes
+
 def draw_3d_bounding_boxes(chunk: ImageChunk, centers, dimensions, poses):
     boxes = []
     for bb_idx in range(len(centers)):

@@ -29,7 +29,7 @@ def _image_to_tensor(image):
     image_transformed, _ = transform(image, None)
     return image_transformed
 
-def get_2d_bounding_boxes(image, prompt):
+def get_2d_bounding_boxes(image, prompt, threshold=0.35):
     model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
 
     image_tensor = _image_to_tensor(image)
@@ -38,7 +38,7 @@ def get_2d_bounding_boxes(image, prompt):
         model=model,
         image=image_tensor,
         caption=prompt,
-        box_threshold=0.35,
+        box_threshold=threshold,
         text_threshold=0.25,
         device="cpu"
     )
