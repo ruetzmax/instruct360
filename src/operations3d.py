@@ -27,8 +27,6 @@ from cubercnn.modeling.proposal_generator import RPNWithIgnore
 from cubercnn.modeling.roi_heads import ROIHeads3D
 from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
-
-
 CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
 CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
 
@@ -50,6 +48,22 @@ def _get_config():
     default_setup(cfg, None)
     return cfg
 
+# change directory to ovmono3d during model loading
+ovmono_model = None
+original_dir = os.getcwd()
+os.chdir(os.path.join(original_dir, 'ovmono3d'))
+
+try:
+    cfg = _get_config()
+    ovmono_model = build_model(cfg)
+
+    DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
+        CHECKPOINT_PATH, resume=True
+    )
+finally:
+        os.chdir(original_dir)
+        
+
 def get_intrinsics_for_chunk(chunk: ImageChunk):
     #calculate focal length from fov
     fov_x, fov_y = chunk.fov
@@ -69,43 +83,31 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
 
 def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
     
-    # change directory to ovmono3d during model loading and inference
-    original_dir = os.getcwd()
-    os.chdir(os.path.join(original_dir, 'ovmono3d'))
+    global ovmono_model
+
+    ovmono_model.eval()
     
-    try:
-        cfg = _get_config()
-        model = build_model(cfg)
+    h, w, _ = chunk.image.shape
+    K = get_intrinsics_for_chunk(chunk)
+    categories = [prompt]
 
-        DetectionCheckpointer(model, save_dir="temp").resume_or_load(
-            CHECKPOINT_PATH, resume=True
-        )
-
-        model.eval()
+    batched = [{
+        'image': torch.as_tensor(np.ascontiguousarray(chunk.image.transpose(2, 0, 1))).cpu(), 
+        'height': h, 'width': w, 'K': K, 'category_list': categories
+    }]
+    predictions = ovmono_model(batched)[0]['instances']
+    
+    centers, dimensions, poses = [], [], []
+    for pred_idx in range(len(predictions)):
+        pred = predictions[pred_idx]
+        if pred.scores.item() < threshold:
+            continue
         
-        h, w, _ = chunk.image.shape
-        K = get_intrinsics_for_chunk(chunk)
-        categories = [prompt]
-
-        batched = [{
-            'image': torch.as_tensor(np.ascontiguousarray(chunk.image.transpose(2, 0, 1))).cpu(), 
-            'height': h, 'width': w, 'K': K, 'category_list': categories
-        }]
-        predictions = model(batched)[0]['instances']
-        
-        centers, dimensions, poses = [], [], []
-        for pred_idx in range(len(predictions)):
-            pred = predictions[pred_idx]
-            if pred.scores.item() < threshold:
-                continue
-            
-            centers.append(pred.pred_center_cam.detach().cpu().numpy())
-            dimensions.append(pred.pred_dimensions.detach().cpu().numpy())
-            poses.append(pred.pred_pose.detach().cpu().numpy())
-        
-        return centers, dimensions, poses
-    finally:
-        os.chdir(original_dir)
+        centers.append(pred.pred_center_cam.detach().cpu().numpy())
+        dimensions.append(pred.pred_dimensions.detach().cpu().numpy())
+        poses.append(pred.pred_pose.detach().cpu().numpy())
+    
+    return centers, dimensions, poses
         
 def adjust_centers_by_chunk_rotation(centers, chunk: ImageChunk):
     rotated_centers = []
