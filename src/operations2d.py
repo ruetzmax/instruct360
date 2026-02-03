@@ -4,6 +4,9 @@ import groundingdino.datasets.transforms as T
 from typing import Tuple
 from PIL import Image
 from py360convert import e2p
+import torch
+
+dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
 
 
 class ImageChunk:
@@ -30,17 +33,19 @@ def _image_to_tensor(image):
     return image_transformed
 
 def get_2d_bounding_boxes(image, prompt, threshold=0.35):
-    model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
-
+    global dino_model
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
     image_tensor = _image_to_tensor(image)
     
     boxes, logits, phrases = predict(
-        model=model,
+        model=dino_model,
         image=image_tensor,
         caption=prompt,
         box_threshold=threshold,
         text_threshold=0.25,
-        device="cpu"
+        device=device
     )
 
     return boxes.numpy()
