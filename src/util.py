@@ -90,6 +90,40 @@ def get_character_placeholder(scale = 0.5):
     character_placeholder = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(character_placeholder)
     
     return character_placeholder
+
+def get_color_by_index(index):
+    color = util.get_color(index)
+    return [c / 255.0 for c in color]
+
+def mesh_to_dict(mesh):
+    mesh_dict = {
+        'vertices': np.asarray(mesh.vertices),
+        'faces': np.asarray(mesh.triangles)
+    }
+    
+    if mesh.has_vertex_colors():
+        mesh_dict['colors'] = np.asarray(mesh.vertex_colors)
+    else:
+        mesh_dict['colors'] = None
+        
+    return mesh_dict
+
+
+def dict_to_mesh(mesh_dict):
+    mesh = open3d.geometry.TriangleMesh()
+    mesh.vertices = open3d.utility.Vector3dVector(mesh_dict['vertices'])
+    
+    faces = np.asarray(mesh_dict['faces'])
+    faces = faces[:, [0, 2, 1]]  # reverse winding order
+    mesh.triangles = open3d.utility.Vector3iVector(faces)
+    
+    if mesh_dict.get('colors') is not None:
+        mesh.vertex_colors = open3d.utility.Vector3dVector(mesh_dict['colors'])
+    
+    mesh.compute_vertex_normals()
+    
+    return mesh
+
     
 def _mesh_to_plotly(mesh):
     # transpose z and y axes and flip y to match Open3D coords
@@ -125,4 +159,5 @@ def render_scene(meshes):
     )
     fig.show()
         
+
     
