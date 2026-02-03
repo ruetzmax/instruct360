@@ -83,11 +83,12 @@ def get_character_placeholder(scale = 0.5):
     depth = 0.5 * scale
     
     character_placeholder = open3d.geometry.OrientedBoundingBox(
-        center=[0, height / 2, 0],
+        center=[0, -height / 2, 0],
         R=np.eye(3),
         extent=[width, height, depth]
     )
     character_placeholder = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(character_placeholder)
+    character_placeholder.paint_uniform_color([0.0, 0.0, 0.0])
     
     return character_placeholder
 
