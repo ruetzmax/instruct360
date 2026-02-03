@@ -30,7 +30,7 @@ def _setup_video_writer(output_video_path, vis):
     return video_writer     
 
 def _render_frame(vis):
-    image = vis.capture_screen_float_buffer(do_render=True)
+    image = vis.capture_screen_float_buffer(do_render=False)
     image_np = np.asarray(image)
     image_np = (image_np * 255).astype(np.uint8)
     
@@ -81,10 +81,8 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         
         vis.clear_geometries()    
         for mesh in frame_meshes:
-            vis.add_geometry(mesh, reset_bounding_box=frame_idx==0) 
+            vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0) 
         
-        vis.poll_events()
-        vis.update_renderer()
         print(f"Frame {frame_idx + 1}/{len(frames_data)}")
     
     def previous_frame(vis):
@@ -120,14 +118,14 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
             if video_writer is None and output_video_path:
                 video_writer = _setup_video_writer(output_video_path, vis)
             
-            # Write current frame before moving to next
-            if video_writer:
-                frame_image = _render_frame(vis)
-                video_writer.write(frame_image)
-                
             if state['frame_idx'] < len(frames_data) - 1:
                 state['frame_idx'] += 1
                 update_frame()
+                
+                if video_writer:
+                    frame_image = _render_frame(vis)
+                    video_writer.write(frame_image)
+                    
                 time.sleep(1.0 / FPS)
             else:
                 state['playing'] = False
