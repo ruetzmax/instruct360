@@ -99,9 +99,9 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
             if pred.scores.item() < threshold:
                 continue
             
-            centers.append(pred.pred_center_cam.detach().numpy())
-            dimensions.append(pred.pred_dimensions.detach().numpy())
-            poses.append(pred.pred_pose.detach().numpy())
+            centers.append(pred.pred_center_cam.detach().cpu().numpy())
+            dimensions.append(pred.pred_dimensions.detach().cpu().numpy())
+            poses.append(pred.pred_pose.detach().cpu().numpy())
         
         return centers, dimensions, poses
     finally:
