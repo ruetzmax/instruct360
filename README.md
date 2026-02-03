@@ -11,3 +11,6 @@ Extract 3d bounding boxes for arbitrary classes from a equirectangular panorama 
 # Inference
 To infere 3D object bounding boxes from a video, run:
 `python scripts/track_objects_in_video.py --video_path vids/office.mp4 --classes "cupboard" "cup" "chair" --threshold_2d 0.25 --threshold_3d 0.3 --export_meshes True --output output/office_objects.pkl`
+
+To visualize the results, run:
+`python scripts/visualize_tracked_video.py --input output/office_objects.pkl`
