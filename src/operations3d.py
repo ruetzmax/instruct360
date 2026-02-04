@@ -130,7 +130,7 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     # ])
     
     # horizontal angle rotates around X-axis (with offset of -90 degrees)
-    angle_h_adjusted = angle_horizontal_rad - np.pi / 2
+    angle_h_adjusted = angle_horizontal_rad #- np.pi / 2
     rotation_horizontal = np.array([
         [1, 0, 0],
         [0, np.cos(angle_h_adjusted), -np.sin(angle_h_adjusted)],
