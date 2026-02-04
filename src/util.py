@@ -5,7 +5,7 @@ import torch
 from torchvision.ops import box_convert
 import numpy as np
 
-from src.operations2d import ImageChunk
+from src.operations2d import ImageChunk, insv_to_equirect
 from src.operations3d import get_intrinsics_for_chunk
 
 from ovmono3d.cubercnn import util, vis
@@ -15,7 +15,13 @@ from open3d.visualization import draw_geometries
 import plotly.graph_objects as go
 
 
-def read_video_frames(video_path):
+def read_video_frames(video_path=None, left_video_path=None, right_video_path=None):
+    if not video_path:
+        if not left_video_path or not right_video_path:
+            raise ValueError("Either video_path or both left_video_path and right_video_path must be provided.")
+        video_path = "temp/equirect_input.mp4"
+        insv_to_equirect(left_video_path, right_video_path, video_path)
+    
     cap = cv.VideoCapture(video_path)
     if not cap.isOpened():
         print("Cannot open vid")

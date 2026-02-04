@@ -79,6 +79,9 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         placeholder = get_character_placeholder()
         frame_meshes.append(placeholder)
         
+        axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+        frame_meshes.append(axis)
+        
         vis.clear_geometries()    
         for mesh in frame_meshes:
             vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0) 

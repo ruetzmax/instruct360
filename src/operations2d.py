@@ -1,3 +1,5 @@
+import os
+import subprocess
 import numpy as np
 from groundingdino.util.inference import load_model, predict
 import groundingdino.datasets.transforms as T
@@ -31,6 +33,36 @@ def _image_to_tensor(image):
         
     image_transformed, _ = transform(image, None)
     return image_transformed
+
+def insv_to_equirect(left_video_path, right_video_path, output_video_path, stitched_path="temp/stitched.mp4"):
+    if not os.path.exists(left_video_path):
+        raise FileNotFoundError(f"File not found: {left_video_path}")
+    if not os.path.exists(right_video_path):
+        raise FileNotFoundError(f"File not found: {right_video_path}")
+    
+    # stitch both videos side by side
+    stitch_cmd = [
+        "ffmpeg",
+        "-i", "left_video_path",
+        "-i", "right_video_path",
+        "-filter_complex", "[0:v][1:v]hstack=inputs=2[v]; [0:a][1:a]amerge[a]"
+        "-map", "[v]",
+        "-map", "[a]",
+        "-ac", "2",
+        stitched_path
+    ]
+    subprocess.run(stitch_cmd, check=True)
+    
+    # convert to equirect
+    undistort_cmd = [
+        "ffmpeg",
+        "-i", stitched_path,
+        "-vf", "v360=dfisheye:e:yaw=-90",
+        output_video_path
+    ]
+    subprocess.run(undistort_cmd, check=True)
+    print(f"Saved equirectangular video to: {output_video_path}")
+    
 
 def get_2d_bounding_boxes(image, prompt, threshold=0.35):
     global dino_model

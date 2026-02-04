@@ -109,53 +109,97 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
     
     return centers, dimensions, poses
         
-def adjust_centers_by_chunk_rotation(centers, chunk: ImageChunk):
+def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     rotated_centers = []
+    rotated_poses = []
     
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
-    rotation = np.array([
-        [np.cos(angle_horizontal_rad), -np.sin(angle_horizontal_rad), 0],
-        [np.sin(angle_horizontal_rad), np.cos(angle_horizontal_rad), 0],
-        [0, 0, 1]
+    
+    # horizontal angle rotates around Y-axis
+    rotation_horizontal = np.array([
+        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
+        [0, 1, 0],
+        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
     ])
+    
+    # vertical angle rotates around X-axis
+    rotation_vertical = np.array([
+        [1, 0, 0],
+        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
+        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
+    ])
+
+    rotation = rotation_vertical @ rotation_horizontal
+    
     for center in centers:
         rotated_center = rotation @ center.T
         rotated_centers.append(rotated_center)
-        
-    return rotated_centers
-
-def _torch_mesh_to_open3d(torch_mesh):
-    verts = torch_mesh.verts_packed().detach().cpu().numpy()
-    faces = torch_mesh.faces_packed().detach().cpu().numpy()
     
-    o3d_mesh = open3d.geometry.TriangleMesh()
-    o3d_mesh.vertices = open3d.utility.Vector3dVector(verts)
-    o3d_mesh.triangles = open3d.utility.Vector3iVector(faces)
+    for pose in poses:
+        pose_array = np.array(pose).reshape(3, 3)
+        rotated_pose = rotation @ pose_array
+        rotated_poses.append(rotated_pose)
     
-    if torch_mesh.textures is not None and hasattr(torch_mesh.textures, 'verts_features_packed'):
-        colors = torch_mesh.textures.verts_features_packed().detach().cpu().numpy()
-        if colors.max() > 1.0:
-            colors = colors / 255.0
-        o3d_mesh.vertex_colors = open3d.utility.Vector3dVector(colors[:, :3])
+    return rotated_centers, rotated_poses
     
-    o3d_mesh.compute_vertex_normals()
+def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
+    # create opencv box mesh
+    center = np.array(center).flatten()
+    dimensions = np.array(dimensions).flatten()
+    pose_matrix = np.array(pose).reshape(3, 3)
     
-    return o3d_mesh
+    w, h, d = dimensions
+    vertices_local = np.array([
+        [-w/2, -h/2, -d/2],  # 0: front-bottom-left
+        [ w/2, -h/2, -d/2],  # 1: front-bottom-right
+        [ w/2,  h/2, -d/2],  # 2: front-top-right
+        [-w/2,  h/2, -d/2],  # 3: front-top-left
+        [-w/2, -h/2,  d/2],  # 4: back-bottom-left
+        [ w/2, -h/2,  d/2],  # 5: back-bottom-right
+        [ w/2,  h/2,  d/2],  # 6: back-top-right
+        [-w/2,  h/2,  d/2],  # 7: back-top-left
+    ])
+    
+    vertices = (pose_matrix @ vertices_local.T).T + center
+    
+    # flip x an z to match Open3D coordinate system
+    vertices = vertices * [-1, 1, -1]
+    
+    triangles = np.array([
+        # front face
+        [0, 1, 2], [0, 2, 3],
+        # back face
+        [4, 6, 5], [4, 7, 6],
+        # left face
+        [0, 3, 7], [0, 7, 4],
+        # right face
+        [1, 5, 6], [1, 6, 2],
+        # bottom face
+        [0, 4, 5], [0, 5, 1],
+        # top face
+        [3, 2, 6], [3, 6, 7],
+    ])
+    
+    mesh = open3d.geometry.TriangleMesh()
+    mesh.vertices = open3d.utility.Vector3dVector(vertices)
+    mesh.triangles = open3d.utility.Vector3iVector(triangles)
+    
+    color_normalized = np.array(color) / 255.0 if max(color) > 1.0 else np.array(color)
+    mesh.paint_uniform_color(color_normalized)
+    
+    mesh.compute_vertex_normals()
+    
+    return mesh
 
 def get_box_meshes(boxes, color=(0, 0, 255)):
     centers, dimensions, poses = boxes
     meshes = []
     for box_idx in range(len(centers)):
-        center = centers[box_idx].flatten().tolist() if isinstance(centers[box_idx], np.ndarray) else list(centers[box_idx])
-        dimension = dimensions[box_idx].flatten().tolist() if isinstance(dimensions[box_idx], np.ndarray) else list(dimensions[box_idx])
-        bbox3d = center + dimension
-        
+        center = centers[box_idx]
+        dimension = dimensions[box_idx]
         pose = poses[box_idx]
-        if isinstance(pose, np.ndarray):
-            pose = np.squeeze(pose).tolist()
         
-        mesh = util.mesh_cuboid(bbox3d, pose, color=color)
-        mesh = _torch_mesh_to_open3d(mesh)
+        mesh = _create_box_mesh(center, dimension, pose, color=color)
         meshes.append(mesh)
     return meshes
         

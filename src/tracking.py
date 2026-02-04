@@ -1,5 +1,5 @@
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks
-from src.operations3d import get_3d_bounding_boxes, adjust_centers_by_chunk_rotation, get_box_meshes
+from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rotation, get_box_meshes
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
@@ -13,19 +13,19 @@ def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold
     all_bb_poses = []
     for chunk in image_chunks:
         bb_centers, bb_dimensions, bb_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
-        bb_centers_adjusted = adjust_centers_by_chunk_rotation(bb_centers, chunk)
+        bb_centers_adjusted, bb_poses_adjusted = adjust_rotation_by_chunk_rotation(bb_centers, bb_poses, chunk)
         all_bb_centers.extend(bb_centers_adjusted)
         all_bb_dimensions.extend(bb_dimensions)
-        all_bb_poses.extend(bb_poses)
+        all_bb_poses.extend(bb_poses_adjusted)
         
     return all_bb_centers, all_bb_dimensions, all_bb_poses
 
-def track_objects_in_video(video_path, classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None):
+def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None):
     
     if colors and len(colors) != len(classes):
         raise ValueError("Length of colors must match length of classes.")
     
-    frames = read_video_frames(video_path)
+    frames = read_video_frames(video_path, left_video_path, right_video_path)
     
     frame_results = []
     
