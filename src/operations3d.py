@@ -115,38 +115,21 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
     
-    # # horizontal angle rotates around Y-axis
-    # rotation_horizontal = np.array([
-    #     [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
-    #     [0, 1, 0],
-    #     [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
-    # ])
-    
-    # # vertical angle rotates around X-axis
-    # rotation_vertical = np.array([
-    #     [1, 0, 0],
-    #     [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
-    #     [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
-    # ])
-    
-    # horizontal angle rotates around X-axis (with offset of -90 degrees)
-    angle_h_adjusted = angle_horizontal_rad #- np.pi / 2
-    rotation_horizontal = np.array([
-        [1, 0, 0],
-        [0, np.cos(angle_h_adjusted), -np.sin(angle_h_adjusted)],
-        [0, np.sin(angle_h_adjusted), np.cos(angle_h_adjusted)]
-    ])
-    
-    # vertical angle rotates around Y-axis (with no offset)
-    rotation_vertical = np.array([
-        [np.cos(angle_vertical_rad), 0, np.sin(angle_vertical_rad)],
+    # horizontal angle rotates around Y-axis
+    rotation_yaw = np.array([
+        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
         [0, 1, 0],
-        [-np.sin(angle_vertical_rad), 0, np.cos(angle_vertical_rad)]
+        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
     ])
     
+    # vertical angle rotates around X-axis
+    rotation_pitch = np.array([
+        [1, 0, 0],
+        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
+        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
+    ])
     
-    
-    rotation = rotation_vertical @ rotation_horizontal
+    rotation = rotation_pitch @ rotation_yaw
     
     for center in centers:
         rotated_center = rotation @ center.T

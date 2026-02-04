@@ -95,8 +95,8 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700))
         chunk_center_normalized = (chunk_center_pixel[0] / w, chunk_center_pixel[1] / h)
         
         #calculate angle from image center
-        angle_horizontal_rad = (chunk_center_normalized[0] - 0.5) * 2 * np.pi
-        angle_vertical_rad = (0.5 - chunk_center_normalized[1]) * np.pi
+        angle_horizontal_rad = (0.5 - chunk_center_normalized[1]) * 2 * np.pi 
+        angle_vertical_rad = (chunk_center_normalized[0] - 0.5) * np.pi 
         angle = (angle_horizontal_rad, angle_vertical_rad)
 
         # calculate fov
