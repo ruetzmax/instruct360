@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.util import dict_to_mesh, get_character_placeholder
 
-FPS = 10
+FPS = 24
 
 class_colors = {
     'cupboard': [1.0, 0.0, 0.0],

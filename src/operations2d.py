@@ -34,6 +34,7 @@ def _image_to_tensor(image):
     image_transformed, _ = transform(image, None)
     return image_transformed
 
+# see: https://github.com/peterbraden/insv-to-yt, https://www.arj.no/2025/12/19/insta360-to-equirectangular/
 def insv_to_equirect(left_video_path, right_video_path, output_video_path, stitched_path="temp/stitched.mp4"):
     if not os.path.exists(left_video_path):
         raise FileNotFoundError(f"File not found: {left_video_path}")
