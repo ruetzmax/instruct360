@@ -83,7 +83,7 @@ def get_2d_bounding_boxes(image, prompt, threshold=0.35):
 
     return boxes.numpy()
 
-def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700)):
+def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700), orientation='vertical'):
     # create an ImageChunk for each bounding box
     image_chunks = []
     h, w, _ = image.shape
@@ -96,9 +96,19 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700))
         chunk_center_normalized = (chunk_center_pixel[0] / w, chunk_center_pixel[1] / h)
         
         #calculate angle from image center
-        angle_horizontal_rad = (0.5 - chunk_center_normalized[1]) * 2 * np.pi 
-        angle_vertical_rad = (chunk_center_normalized[0] - 0.5) * np.pi 
-        angle = (angle_horizontal_rad, angle_vertical_rad)
+        if orientation == 'vertical':
+            scene_angle_horizontal_rad = (0.5 - chunk_center_normalized[1]) * 2 * np.pi 
+            scene_angle_vertical_rad = (chunk_center_normalized[0] - 0.5) * np.pi 
+        elif orientation == 'horizontal':
+            lookup_angle_horizontal_rad = (chunk_center_normalized[0] - 0.5) * 2 * np.pi
+            lookup_angle_vertical_rad = (0.5 - chunk_center_normalized[1]) * np.pi
+            
+            scene_angle_horizontal_rad = (chunk_center_normalized[0] - 0.25) * 2 * np.pi 
+            scene_angle_vertical_rad = (chunk_center_normalized[1]-0.5) * np.pi
+        else:
+            raise ValueError("Orientation must be 'vertical' or 'horizontal'")
+            
+        angle = (scene_angle_horizontal_rad, scene_angle_vertical_rad)
 
         # calculate fov
         fov_x = 360 * (chunk_size[0] / w)
@@ -106,7 +116,7 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700))
         fov = (fov_x, fov_y)
         
         # extract image chunk by projecting equirectangular to perspective
-        image_chunk = e2p(image, fov_deg=(fov_x, fov_y), u_deg=np.degrees(angle_horizontal_rad), v_deg=np.degrees(angle_vertical_rad), out_hw=chunk_size)
+        image_chunk = e2p(image, fov_deg=(fov_x, fov_y), u_deg=np.degrees(lookup_angle_horizontal_rad), v_deg=np.degrees(lookup_angle_vertical_rad), out_hw=chunk_size)
         
         image_chunks.append(ImageChunk(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov))
     
