@@ -87,9 +87,10 @@ def get_character_placeholder(scale = 0.5):
     width = 0.5 * scale
     height = 1.8 * scale
     depth = 0.5 * scale
+    camera_offset = 0.5 * scale
     
     character_placeholder = open3d.geometry.OrientedBoundingBox(
-        center=[0, -height / 2, 0],
+        center=[0, -height / 2, camera_offset],
         R=np.eye(3),
         extent=[width, height, depth]
     )

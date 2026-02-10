@@ -133,13 +133,11 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     
     for center in centers:
         rotated_center = rotation @ center.T
-        # rotated_center = center
         rotated_centers.append(rotated_center)
     
     for pose in poses:
         pose_array = np.array(pose).reshape(3, 3)
         rotated_pose = rotation @ pose_array
-        # rotated_pose = pose_array
         rotated_poses.append(rotated_pose)
     
     return rotated_centers, rotated_poses

@@ -7,6 +7,7 @@ Extract 3d bounding boxes for arbitrary classes from a equirectangular panorama 
 3. `pip install -r requirements.txt`
 4. Follow the [Ovmono3D installation instructions](https://github.com/UVA-Computer-Vision-Lab/ovmono3d/tree/main?tab=readme-ov-file#installation-) inside of the root folder, but use the instruct360 conda environment. (For CPU execution, use [this fork](https://github.com/ruetzmax/ovmono3d) instead)
 5. Follow the [GroundingDINO installation instructions](https://github.com/IDEA-Research/GroundingDINO?tab=readme-ov-file#hammer_and_wrench-install) inside of the root folder
+6. Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
 
 # Inference
 To infere 3D object bounding boxes from a video, run:
