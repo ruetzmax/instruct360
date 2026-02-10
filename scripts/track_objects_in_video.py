@@ -8,15 +8,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.tracking import track_objects_in_video    
 
-    
-def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, output_path):
+def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, orientation, output_path):
     tracking_results = track_objects_in_video(
         video_path=video_path,
         classes=classes,
         threshold_2d=threshold_2d,
         threshold_3d=threshold_3d,
         export_meshes=export_meshes,
-        colors=colors
+        colors=colors,
+        orientation=orientation
     )
     with open(output_path, 'wb') as f:
         pickle.dump(tracking_results, f)
@@ -71,6 +71,14 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
+        "--orientation",
+        type=str,
+        default='vertical',
+        choices=['vertical', 'horizontal'],
+        help="Orientation of the 360 camera"
+    )
+    
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -103,5 +111,6 @@ if __name__ == "__main__":
         threshold_3d=args.threshold_3d,
         export_meshes=args.export_meshes,
         colors=colors,
+        orientation=args.orientation,
         output_path=output_path
     )
