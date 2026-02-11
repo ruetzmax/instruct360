@@ -125,8 +125,8 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     # vertical angle rotates around X-axis
     rotation_pitch = np.array([
         [1, 0, 0],
-        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
-        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
+        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
+        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
     ])
     
     rotation = rotation_pitch @ rotation_yaw
