@@ -122,7 +122,6 @@ def dict_to_mesh(mesh_dict):
     mesh.vertices = open3d.utility.Vector3dVector(mesh_dict['vertices'])
     
     faces = np.asarray(mesh_dict['faces'])
-    faces = faces[:, [0, 2, 1]]  # reverse winding order
     mesh.triangles = open3d.utility.Vector3iVector(faces)
     
     if mesh_dict.get('colors') is not None:
