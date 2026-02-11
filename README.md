@@ -16,4 +16,6 @@ To infere 3D object bounding boxes from a video, run:
 To visualize the results, run:
 `python scripts/visualize_tracked_video.py --input output/office_objects.pkl`
 To draw 2d bounding boxes, run:
-`python scripts/visualize_2d_bounding_boxes.py --input_video vids/hallway.mp4 --object_pkl output/hallway_objects_40_40.pkl --output_video output/boxes2d.mp4`
+`python scripts/visualize_2d_bounding_boxes.py --input_video vids/office.mp4 --object_pkl output/office_objects.pkl --output_video output/boxes2d.mp4`
+To append camera poses to already tracked data (will be automatically considered in visualization), run: 
+`python scripts/append_camera_poses.py --input_video vids/office.mp4 --input_pkl output/office_objects.pkl --output_pkl output/office_objects_with_poses.pkl`

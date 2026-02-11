@@ -141,6 +141,21 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
         rotated_poses.append(rotated_pose)
     
     return rotated_centers, rotated_poses
+
+def adjust_pose_by_camera_pose(mesh, camera_translation, camera_rotation):
+    adjusted_mesh = open3d.geometry.TriangleMesh(mesh)
+        
+    # rotate opencv mesh by camera rotation
+    rot_mat = mesh.get_rotation_matrix_from_quaternion(camera_rotation)
+    rot_180_z = mesh.get_rotation_matrix_from_axis_angle([0, 0, np.pi])
+    rot_mat = rot_180_z @ rot_mat
+    adjusted_mesh.rotate(rot_mat, center=[0, 0, 0])
+    
+    # translate opencv mesh by camera translation
+    camera_translation = [camera_translation[2], camera_translation[1], camera_translation[0]]
+    adjusted_mesh.translate(camera_translation)
+    
+    return adjusted_mesh
     
 def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
     # create opencv box mesh

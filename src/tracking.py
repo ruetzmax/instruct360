@@ -1,3 +1,6 @@
+import subprocess
+import os
+
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks
 from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rotation, get_box_meshes
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
@@ -67,3 +70,35 @@ def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_
         frame_results.append(frame_result)
     
     return frame_results
+
+def track_camera_poses(video_path):
+    slam_executable = os.path.expanduser("~/lib/stella_vslam_examples/build/run_video_slam")
+    slam_command = [
+        slam_executable,
+        "-v", "config/orb_vocab.fbow",
+        "-c", "config/equirectangular.yaml",
+        "-m", video_path,
+        "--frame-skip", "1",
+        "--temporal-mapping",
+        "--viewer", "none",
+        "--map-db-out", "temp/tracked.msg",
+        "--eval-log-dir", "temp",
+    ]
+    subprocess.run(slam_command, check=True)
+    
+    camera_poses = []
+    
+    # each row contains: timestamp tx ty tz qx qy qz qw
+    with open("temp/frame_trajectory.txt", "r") as f:
+        for line in f:
+            values = line.strip().split()
+            
+            frame_translation = [float(values[1]), float(values[2]), float(values[3])]
+            frame_rotation = [float(values[4]), float(values[5]), float(values[6]), float(values[7])]
+            frame_dict = {
+                'translation': frame_translation,
+                'rotation': frame_rotation
+            }
+            camera_poses.append(frame_dict)
+    return camera_poses
+        

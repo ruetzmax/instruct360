@@ -10,6 +10,7 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.operations3d import adjust_pose_by_camera_pose
 from src.util import dict_to_mesh, get_character_placeholder
 
 FPS = 24
@@ -60,6 +61,9 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         frame_idx = state['frame_idx']
         frame_data = frames_data[frame_idx]
         
+        frame_camera_translation = frame_data.get('camera_translation', None)
+        frame_camera_rotation = frame_data.get('camera_rotation', None)
+        
         frame_meshes = []
         
         class_dicts = frame_data['classes']
@@ -73,13 +77,20 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                 
                 if class_name in class_colors:
                     mesh.paint_uniform_color(class_colors[class_name])
+                    
+                if frame_camera_translation and frame_camera_rotation:
+                    mesh = adjust_pose_by_camera_pose(mesh, frame_camera_translation, frame_camera_rotation)
                 
                 frame_meshes.append(mesh)
         
         placeholder = get_character_placeholder()
-        frame_meshes.append(placeholder)
-        
         axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+
+        if frame_camera_translation and frame_camera_rotation:
+            placeholder = adjust_pose_by_camera_pose(placeholder, frame_camera_translation, frame_camera_rotation)
+            axis = adjust_pose_by_camera_pose(axis, frame_camera_translation, frame_camera_rotation)
+            
+        frame_meshes.append(placeholder)
         frame_meshes.append(axis)
         
         vis.clear_geometries()    
