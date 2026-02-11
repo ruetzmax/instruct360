@@ -177,8 +177,8 @@ def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
     
     vertices = (pose_matrix @ vertices_local.T).T + center
     
-    # flip x an z to match Open3D coordinate system
-    vertices = vertices * [-1, 1, -1]
+    # flip x, y and z to match Open3D coordinate system
+    vertices = vertices * [-1, -1, -1]
     
     triangles = np.array([
         # front face
