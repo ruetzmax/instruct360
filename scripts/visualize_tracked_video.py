@@ -23,7 +23,11 @@ class_colors = {
 }
 
 unique_distance_threshold = 1.5
+
 dimension_change_threshold = 0.5
+position_change_threshold = 0.05
+pose_change_threshold = 0.05
+
 unique_meshes_by_class = {}
 
 def _setup_video_writer(output_video_path, vis):
@@ -134,23 +138,43 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None, world_
                     
                 unique_idx = _get_unique_index(mesh, class_name)
                 
-                # only use new dimension if it changes significantly
-                global dimension_change_threshold
+                # only use new dimension/position/pose if it changes significantly
+                global dimension_change_threshold, position_change_threshold, pose_change_threshold
                 
                 previous_mesh = unique_meshes_by_class[class_name][unique_idx]
                 previous_dimension = previous_mesh.get_oriented_bounding_box().extent
-                current_dimension = mesh.get_oriented_bounding_box().extent
-                current_center = bb_centers[mesh_idx]
-                current_pose = bb_poses[mesh_idx]
+                previous_center = previous_mesh.get_center()
+                previous_pose = previous_mesh.get_oriented_bounding_box().R
                 
-                relative_change = abs(current_dimension - previous_dimension) / (previous_dimension + 1e-6)
-                if relative_change.max() > dimension_change_threshold:
+                current_dimension = mesh.get_oriented_bounding_box().extent
+                current_center = mesh.get_center()
+                current_pose = mesh.get_oriented_bounding_box().R
+                
+                relative_dimension_change = abs(current_dimension - previous_dimension) / (previous_dimension + 1e-6)
+                if relative_dimension_change.max() > dimension_change_threshold:
                     new_dimension = current_dimension
                 else:
                     new_dimension = previous_dimension
+                    
+                absolute_position_change = np.linalg.norm(np.array(current_center) - np.array(previous_center))
+                if absolute_position_change > position_change_threshold:
+                    new_center = current_center
+                else:
+                    new_center = previous_center
+                    
+                absolute_pose_change = np.linalg.norm(current_pose - previous_pose)
+                if absolute_pose_change > pose_change_threshold:
+                    new_pose = current_pose
+                else:
+                    new_pose = previous_pose
                 
-                new_mesh = get_box_mesh((current_center, new_dimension, current_pose))
-                new_mesh = adjust_pose_by_camera_pose(new_mesh, frame_camera_translation, frame_camera_rotation)
+                #create open3d oriented bb
+                new_mesh = open3d.geometry.OrientedBoundingBox(new_center, new_pose, new_dimension)
+                #convert to triangle mesh
+                new_mesh = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(new_mesh)
+                
+                # new_mesh = get_box_mesh((current_center, new_dimension, current_pose))
+                # new_mesh = adjust_pose_by_camera_pose(new_mesh, frame_camera_translation, frame_camera_rotation)
                 
                 unique_meshes_by_class[class_name][unique_idx] = new_mesh
                 
