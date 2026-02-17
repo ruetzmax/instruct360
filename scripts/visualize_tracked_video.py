@@ -11,8 +11,8 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.operations3d import adjust_pose_by_camera_pose, get_box_mesh, get_box_meshes
-from src.util import dict_to_mesh, get_character_placeholder
+from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes
+from src.util import get_character_placeholder
 
 FPS = 24
 
@@ -79,7 +79,7 @@ def _get_unique_index(mesh, class_name):
     unique_meshes.append(mesh)
     return len(unique_meshes) - 1
 
-def do_visualization(object_pkl_path: str, output_video_path: str = None, world_msg_path: str = None):
+def do_visualization(object_pkl_path: str, output_video_path: str = None):
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
         
@@ -277,12 +277,5 @@ if __name__ == "__main__":
         help="Path to output video file (MP4). If provided, will render all frames and save as video."
     )
     
-    parser.add_argument(
-        "--world_msg",
-        type=str,
-        default=None,
-        help="Path to the world message file (msgpack) containing world landmarks. If provided, will render landmarks in visualization."
-    )
-    
     args = parser.parse_args()
-    do_visualization(args.input, args.output_video, args.world_msg)
+    do_visualization(args.input, args.output_video)
