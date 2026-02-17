@@ -206,6 +206,10 @@ def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
     
     return mesh
 
+def get_box_mesh(box, color=(0, 0, 255)):
+    center, dimension, pose = box
+    return _create_box_mesh(center, dimension, pose, color=color)
+
 def get_box_meshes(boxes, color=(0, 0, 255)):
     centers, dimensions, poses = boxes
     meshes = []

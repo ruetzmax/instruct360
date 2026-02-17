@@ -4,13 +4,14 @@ import time
 from pathlib import Path
 import pickle
 import sys
+import msgpack
 import open3d
 import numpy as np
 import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.operations3d import adjust_pose_by_camera_pose
+from src.operations3d import adjust_pose_by_camera_pose, get_box_mesh, get_box_meshes
 from src.util import dict_to_mesh, get_character_placeholder
 
 FPS = 24
@@ -21,6 +22,10 @@ class_colors = {
     'chair': [0.0, 0.0, 1.0],
 }
 
+unique_distance_threshold = 1.5
+dimension_change_threshold = 0.5
+unique_meshes_by_class = {}
+
 def _setup_video_writer(output_video_path, vis):
     setup_image = vis.capture_screen_float_buffer(do_render=False)
     setup_image_np = np.asarray(setup_image)
@@ -28,7 +33,26 @@ def _setup_video_writer(output_video_path, vis):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(output_video_path, fourcc, FPS, (width, height))
 
-    return video_writer     
+    return video_writer  
+
+def _load_landmarks_as_pointcloud(world_msg_path):
+    with open(world_msg_path, 'rb') as f:
+        world_data = msgpack.unpack(f)
+    world_landmark_dict = world_data["landmarks"]
+    world_landmarks = []
+    for landmark in world_landmark_dict.values():
+        pos = landmark["pos_w"]
+        pos = [pos[2], -pos[1], pos[0]]
+        world_landmarks.append(pos)
+        
+    print(f"Loaded {len(world_landmark_dict)} world landmarks")
+    
+    landmarks_np = np.array(world_landmarks)
+    landmark_pointcloud = open3d.geometry.PointCloud()
+    landmark_pointcloud.points = open3d.utility.Vector3dVector(landmarks_np)
+    landmark_pointcloud.paint_uniform_color([0.0, 0.0, 0.0])
+    
+    return landmark_pointcloud
 
 def _render_frame(vis):
     image = vis.capture_screen_float_buffer(do_render=False)
@@ -38,7 +62,26 @@ def _render_frame(vis):
     image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
     return image_bgr
 
-def do_visualization(object_pkl_path: str, output_video_path: str = None):
+def _is_same_object(mesh1, mesh2):
+    global unique_distance_threshold
+    # if two objects are very close to each other, we consider them the same
+    center1 = mesh1.get_center()
+    center2 = mesh2.get_center()
+    distance = np.linalg.norm(np.array(center1) - np.array(center2))
+    return distance < unique_distance_threshold
+
+def _get_unique_index(mesh, class_name):
+    global unique_meshes_by_class
+    if class_name not in unique_meshes_by_class:
+        unique_meshes_by_class[class_name] = []
+    unique_meshes = unique_meshes_by_class[class_name]
+    for idx, unique_mesh in enumerate(unique_meshes):
+        if _is_same_object(mesh, unique_mesh):
+            return idx
+    unique_meshes.append(mesh)
+    return len(unique_meshes) - 1
+
+def do_visualization(object_pkl_path: str, output_video_path: str = None, world_msg_path: str = None):
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
         
@@ -50,14 +93,24 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
     else:
         print("Controls: 'a' - previous frame, 'd' - next frame, 'space' - play/pause, 'q' - quit")
         
+    world_landmarks = None
+    if world_msg_path:
+        world_landmarks = _load_landmarks_as_pointcloud(world_msg_path)
+        
     vis = open3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()   
+    
+    ctr = vis.get_view_control()
+    ctr.set_constant_z_far(10000.0)
+    ctr.set_constant_z_near(0.1) 
     
     video_writer = None     
     
     state = {'frame_idx': 0, 'playing': False}
     
     def update_frame():
+        global unique_meshes_by_class
+        
         frame_idx = state['frame_idx']
         frame_data = frames_data[frame_idx]
         
@@ -69,18 +122,45 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         class_dicts = frame_data['classes']
         for class_dict in class_dicts:
             class_name = class_dict['class_name']
-            if 'meshes' not in class_dict:
-                continue
-            mesh_dicts = class_dict['meshes']
-            for mesh_dict in mesh_dicts:
-                mesh = dict_to_mesh(mesh_dict)
-                
-                if class_name in class_colors:
-                    mesh.paint_uniform_color(class_colors[class_name])
-                    
+            bb_centers = class_dict['centers']
+            bb_dimensions = class_dict['dimensions']
+            bb_poses = class_dict['poses']
+            meshes = get_box_meshes((bb_centers, bb_dimensions, bb_poses))
+            
+            # filter out duplicate meshes
+            for mesh_idx, mesh in enumerate(meshes):
                 if frame_camera_translation and frame_camera_rotation:
                     mesh = adjust_pose_by_camera_pose(mesh, frame_camera_translation, frame_camera_rotation)
+                    
+                unique_idx = _get_unique_index(mesh, class_name)
                 
+                # only use new dimension if it changes significantly
+                global dimension_change_threshold
+                
+                previous_mesh = unique_meshes_by_class[class_name][unique_idx]
+                previous_dimension = previous_mesh.get_oriented_bounding_box().extent
+                current_dimension = mesh.get_oriented_bounding_box().extent
+                current_center = bb_centers[mesh_idx]
+                current_pose = bb_poses[mesh_idx]
+                
+                relative_change = abs(current_dimension - previous_dimension) / (previous_dimension + 1e-6)
+                if relative_change.max() > dimension_change_threshold:
+                    new_dimension = current_dimension
+                else:
+                    new_dimension = previous_dimension
+                
+                new_mesh = get_box_mesh((current_center, new_dimension, current_pose))
+                new_mesh = adjust_pose_by_camera_pose(new_mesh, frame_camera_translation, frame_camera_rotation)
+                
+                unique_meshes_by_class[class_name][unique_idx] = new_mesh
+                
+                # unique_meshes_by_class[class_name][unique_idx] = mesh
+          
+        # render all unique meshes  
+        for class_name, unique_meshes in unique_meshes_by_class.items():
+            for mesh in unique_meshes:  
+                if class_name in class_colors:
+                    mesh.paint_uniform_color(class_colors[class_name])   
                 frame_meshes.append(mesh)
         
         placeholder = get_character_placeholder()
@@ -92,6 +172,9 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
             
         frame_meshes.append(placeholder)
         frame_meshes.append(axis)
+        
+        if world_landmarks is not None:
+            frame_meshes.append(world_landmarks)
         
         vis.clear_geometries()    
         for mesh in frame_meshes:
@@ -174,5 +257,12 @@ if __name__ == "__main__":
         help="Path to output video file (MP4). If provided, will render all frames and save as video."
     )
     
+    parser.add_argument(
+        "--world_msg",
+        type=str,
+        default=None,
+        help="Path to the world message file (msgpack) containing world landmarks. If provided, will render landmarks in visualization."
+    )
+    
     args = parser.parse_args()
-    do_visualization(args.input, args.output_video)
+    do_visualization(args.input, args.output_video, args.world_msg)
