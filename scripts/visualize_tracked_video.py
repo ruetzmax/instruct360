@@ -25,10 +25,23 @@ class_colors = {
 unique_distance_threshold = 1.5
 
 dimension_change_threshold = 0.5
-position_change_threshold = 0.05
-pose_change_threshold = 0.05
+position_change_threshold = 0.2
+pose_change_threshold = 0.3
 
 unique_meshes_by_class = {}
+
+world_landmarks = []
+
+def _point_cloud_from_landmarks(landmarks):       
+        if len(landmarks) == 0:
+            return
+                
+        landmark_pointcloud = open3d.geometry.PointCloud()
+        landmarks = [[pos[2], -pos[1], pos[0]] for pos in landmarks]
+        landmarks_np = np.array(landmarks)
+        landmark_pointcloud.points = open3d.utility.Vector3dVector(landmarks_np)
+        landmark_pointcloud.paint_uniform_color([0.0, 0.0, 0.0])
+        return landmark_pointcloud
 
 def _setup_video_writer(output_video_path, vis):
     setup_image = vis.capture_screen_float_buffer(do_render=False)
@@ -38,25 +51,6 @@ def _setup_video_writer(output_video_path, vis):
     video_writer = cv2.VideoWriter(output_video_path, fourcc, FPS, (width, height))
 
     return video_writer  
-
-def _load_landmarks_as_pointcloud(world_msg_path):
-    with open(world_msg_path, 'rb') as f:
-        world_data = msgpack.unpack(f)
-    world_landmark_dict = world_data["landmarks"]
-    world_landmarks = []
-    for landmark in world_landmark_dict.values():
-        pos = landmark["pos_w"]
-        pos = [pos[2], -pos[1], pos[0]]
-        world_landmarks.append(pos)
-        
-    print(f"Loaded {len(world_landmark_dict)} world landmarks")
-    
-    landmarks_np = np.array(world_landmarks)
-    landmark_pointcloud = open3d.geometry.PointCloud()
-    landmark_pointcloud.points = open3d.utility.Vector3dVector(landmarks_np)
-    landmark_pointcloud.paint_uniform_color([0.0, 0.0, 0.0])
-    
-    return landmark_pointcloud
 
 def _render_frame(vis):
     image = vis.capture_screen_float_buffer(do_render=False)
@@ -97,9 +91,6 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None, world_
     else:
         print("Controls: 'a' - previous frame, 'd' - next frame, 'space' - play/pause, 'q' - quit")
         
-    world_landmarks = None
-    if world_msg_path:
-        world_landmarks = _load_landmarks_as_pointcloud(world_msg_path)
         
     vis = open3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()   
@@ -197,12 +188,17 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None, world_
         frame_meshes.append(placeholder)
         frame_meshes.append(axis)
         
-        if world_landmarks is not None:
-            frame_meshes.append(world_landmarks)
+        global world_landmarks
+        landmarks = frame_data.get('landmarks', [])
+        world_landmarks.extend(landmarks)
+        landmarks_mesh = _point_cloud_from_landmarks(world_landmarks)
         
         vis.clear_geometries()    
         for mesh in frame_meshes:
             vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0) 
+            
+        if landmarks_mesh is not None:
+            vis.add_geometry(landmarks_mesh, reset_bounding_box=False) 
         
         print(f"Frame {frame_idx + 1}/{len(frames_data)}")
     

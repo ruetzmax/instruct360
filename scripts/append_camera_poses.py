@@ -22,6 +22,7 @@ def append_camera_poses(input_video_path, object_pkl_path, output_pkl_path):
         frame_pose = camera_poses[frame_idx]
         frame_data['camera_translation'] = frame_pose["translation"]
         frame_data['camera_rotation'] = frame_pose["rotation"]
+        frame_data['landmarks'] = frame_pose["landmarks"]
         
     if output_pkl_path is None:
         output_pkl_path = object_pkl_path

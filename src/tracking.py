@@ -1,6 +1,8 @@
 import subprocess
 import os
 
+import msgpack
+
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks
 from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rotation, get_box_meshes
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
@@ -88,6 +90,9 @@ def track_camera_poses(video_path):
     
     camera_poses = []
     
+    with open("temp/tracked.msg", "rb") as f:
+        map_data = msgpack.unpack(f)
+    
     # each row contains: timestamp tx ty tz qx qy qz qw
     with open("temp/frame_trajectory.txt", "r") as f:
         for line in f:
@@ -95,10 +100,29 @@ def track_camera_poses(video_path):
             
             frame_translation = [float(values[1]), float(values[2]), float(values[3])]
             frame_rotation = [float(values[4]), float(values[5]), float(values[6]), float(values[7])]
+            
+            # look for corresponding keyframe and extract landmarks
+            landmark_positions = []
+            frame_timestamp = str(values[0])
+            keyframe_id = None
+            keyframes_dict = map_data.get("keyframes", {})
+            for idx, keyframe in keyframes_dict.items():
+                if str(keyframe["ts"]).startswith(frame_timestamp):
+                    keyframe_id = int(idx)
+                    break
+            if keyframe_id is not None:
+                landmarks_dict = map_data.get("landmarks", {})
+                for landmark_id, landmark in landmarks_dict.items():
+                    if landmark["ref_keyfrm"] == keyframe_id:
+                        pos = landmark["pos_w"]
+                        landmark_positions.append(pos)
+                                                
             frame_dict = {
                 'translation': frame_translation,
-                'rotation': frame_rotation
+                'rotation': frame_rotation,
+                'landmarks': landmark_positions
             }
+
             camera_poses.append(frame_dict)
     return camera_poses
         
