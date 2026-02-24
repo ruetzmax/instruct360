@@ -3,29 +3,34 @@ import os
 
 import msgpack
 
-from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks
+from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, image_chunk_from_undistorted
 from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rotation, get_box_meshes
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
-def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold_3d=0.3, orientation='vertical'):
+def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold_3d=0.3, orientation='vertical', format='equirectangular'):
     bounding_boxes_2d = get_2d_bounding_boxes(image, class_name, threshold=threshold_2d)
     
-    image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation=orientation)
     
-    all_3d_bb_centers = []
-    all_3d_bb_dimensions = []
-    all_3d_bb_poses = []
-    for chunk in image_chunks:
-        bb_3d_centers, bb_3d_dimensions, bb_3d_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
-        bb_3d_centers_adjusted, bb_3d_poses_adjusted = adjust_rotation_by_chunk_rotation(bb_3d_centers, bb_3d_poses, chunk)
-        all_3d_bb_centers.extend(bb_3d_centers_adjusted)
-        all_3d_bb_dimensions.extend(bb_3d_dimensions)
-        all_3d_bb_poses.extend(bb_3d_poses_adjusted)
+    if format == 'equirectangular':
+        image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation=orientation)
+        
+        all_3d_bb_centers = []
+        all_3d_bb_dimensions = []
+        all_3d_bb_poses = []
+        for chunk in image_chunks:
+            bb_3d_centers, bb_3d_dimensions, bb_3d_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
+            bb_3d_centers_adjusted, bb_3d_poses_adjusted = adjust_rotation_by_chunk_rotation(bb_3d_centers, bb_3d_poses, chunk)
+            all_3d_bb_centers.extend(bb_3d_centers_adjusted)
+            all_3d_bb_dimensions.extend(bb_3d_dimensions)
+            all_3d_bb_poses.extend(bb_3d_poses_adjusted)
+    elif format == 'undistorted':
+        chunk = image_chunk_from_undistorted(image)
+        all_3d_bb_centers, all_3d_bb_dimensions, all_3d_bb_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
         
     return bounding_boxes_2d, all_3d_bb_centers, all_3d_bb_dimensions, all_3d_bb_poses
 
-def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None, orientation='vertical'):
+def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None, orientation='vertical', format='equirectangular'):
     
     if colors and len(colors) != len(classes):
         raise ValueError("Length of colors must match length of classes.")

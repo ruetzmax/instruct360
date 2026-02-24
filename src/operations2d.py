@@ -121,3 +121,6 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700),
         image_chunks.append(ImageChunk(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov))
     
     return image_chunks
+
+def image_chunk_from_undistorted(image: np.array):
+    return ImageChunk(image=image, center=(0.5, 0.5), angle=(0.0, 0.0), fov=(117, 117)) #using specs of OnePlus 7 Pro

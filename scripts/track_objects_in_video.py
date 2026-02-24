@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.tracking import track_objects_in_video    
 
-def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, orientation, output_path):
+def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, orientation, video_format, output_path):
     tracking_results = track_objects_in_video(
         video_path=video_path,
         classes=classes,
@@ -16,7 +16,8 @@ def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, 
         threshold_3d=threshold_3d,
         export_meshes=export_meshes,
         colors=colors,
-        orientation=orientation
+        orientation=orientation,
+        format=video_format
     )
     with open(output_path, 'wb') as f:
         pickle.dump(tracking_results, f)
@@ -79,6 +80,14 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
+        "--video_format",
+        type=str,
+        default='equirectangular',
+        choices=['equirectangular', 'undistorted'],
+        help="Format of the input video"
+    )
+    
+    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -112,5 +121,6 @@ if __name__ == "__main__":
         export_meshes=args.export_meshes,
         colors=colors,
         orientation=args.orientation,
+        video_format=args.video_format,
         output_path=output_path
     )
