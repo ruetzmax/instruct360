@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.tracking import track_camera_poses
 
 
-def append_camera_poses(input_video_path, object_pkl_path, output_pkl_path):
-    camera_poses = track_camera_poses(input_video_path)
+def append_camera_poses(input_video_path, object_pkl_path, output_pkl_path, video_format='equirectangular'):
+    camera_poses = track_camera_poses(input_video_path, video_format=video_format)
     
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
@@ -49,6 +49,13 @@ if __name__ == "__main__":
         help="Path to the input object pickle file"
     )
     parser.add_argument(
+        "--video_format",
+        type=str,
+        default='equirectangular',
+        choices=['equirectangular', 'undistorted'],
+        help="Format of the input video"
+    )
+    parser.add_argument(
         "--output_pkl",
         type=str,
         help="Path to save the output pickle file with camera poses"
@@ -59,5 +66,6 @@ if __name__ == "__main__":
     append_camera_poses(
         args.input_video,
         args.input_pkl,
-        args.output_pkl
+        args.output_pkl,
+        video_format=args.video_format
     )

@@ -17,7 +17,7 @@ def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, 
         export_meshes=export_meshes,
         colors=colors,
         orientation=orientation,
-        format=video_format
+        video_format=video_format
     )
     with open(output_path, 'wb') as f:
         pickle.dump(tracking_results, f)

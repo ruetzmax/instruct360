@@ -8,11 +8,11 @@ from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rot
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
-def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold_3d=0.3, orientation='vertical', format='equirectangular'):
+def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold_3d=0.3, orientation='vertical', video_format='equirectangular'):
     bounding_boxes_2d = get_2d_bounding_boxes(image, class_name, threshold=threshold_2d)
     
     
-    if format == 'equirectangular':
+    if video_format == 'equirectangular':
         image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation=orientation)
         
         all_3d_bb_centers = []
@@ -24,13 +24,13 @@ def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold
             all_3d_bb_centers.extend(bb_3d_centers_adjusted)
             all_3d_bb_dimensions.extend(bb_3d_dimensions)
             all_3d_bb_poses.extend(bb_3d_poses_adjusted)
-    elif format == 'undistorted':
+    elif video_format == 'undistorted':
         chunk = image_chunk_from_undistorted(image)
         all_3d_bb_centers, all_3d_bb_dimensions, all_3d_bb_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
         
     return bounding_boxes_2d, all_3d_bb_centers, all_3d_bb_dimensions, all_3d_bb_poses
 
-def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None, orientation='vertical', format='equirectangular'):
+def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None, orientation='vertical', video_format='equirectangular'):
     
     if colors and len(colors) != len(classes):
         raise ValueError("Length of colors must match length of classes.")
@@ -48,7 +48,7 @@ def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_
         
         for class_idx, class_name in enumerate(classes):
             bbs = get_bounding_boxes_for_class(
-                frame, class_name, threshold_2d=threshold_2d, threshold_3d=threshold_3d, orientation=orientation
+                frame, class_name, threshold_2d=threshold_2d, threshold_3d=threshold_3d, orientation=orientation, video_format=video_format
             )
             
             bb2ds, bb_centers, bb_dimensions, bb_poses = bbs
@@ -78,12 +78,13 @@ def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_
     
     return frame_results
 
-def track_camera_poses(video_path):
+def track_camera_poses(video_path, video_format='equirectangular'):
     slam_executable = os.path.expanduser("~/lib/stella_vslam_examples/build/run_video_slam")
+    config_file = "config/equirectangular.yaml" if video_format == 'equirectangular' else "config/undistorted.yaml"
     slam_command = [
         slam_executable,
         "-v", "config/orb_vocab.fbow",
-        "-c", "config/equirectangular.yaml",
+        "-c", config_file,
         "-m", video_path,
         "--frame-skip", "1",
         "--temporal-mapping",
