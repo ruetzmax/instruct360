@@ -4,3 +4,5 @@ segment-anything
 GroundingDINO
 output
 temp
+sam-3d-objects
+ov-seg

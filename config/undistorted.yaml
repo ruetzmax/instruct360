@@ -3,8 +3,8 @@ Camera:
   setup: "monocular"
   model: "perspective"
 
-  fx: 718.856
-  fy: 718.856
+  fx: 500
+  fy: 500
   cx: 960.0
   cy: 540.0
 

@@ -32,6 +32,8 @@ unique_meshes_by_class = {}
 
 world_landmarks = []
 
+ENABLE_FILTERING = False
+
 def _point_cloud_from_landmarks(landmarks):       
         if len(landmarks) == 0:
             return
@@ -113,6 +115,7 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         frame_camera_rotation = frame_data.get('camera_rotation', None)
         
         frame_meshes = []
+        meshes_to_draw = []
         
         class_dicts = frame_data['classes']
         for class_dict in class_dicts:
@@ -126,6 +129,8 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
             for mesh_idx, mesh in enumerate(meshes):
                 if frame_camera_translation and frame_camera_rotation:
                     mesh = adjust_pose_by_camera_pose(mesh, frame_camera_translation, frame_camera_rotation)
+                    
+                frame_meshes.append(mesh)
                     
                 unique_idx = _get_unique_index(mesh, class_name)
                 
@@ -171,12 +176,20 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                 
                 # unique_meshes_by_class[class_name][unique_idx] = mesh
           
-        # render all unique meshes  
-        for class_name, unique_meshes in unique_meshes_by_class.items():
-            for mesh in unique_meshes:  
+        if ENABLE_FILTERING:
+            # render all unique meshes  
+            for class_name, unique_meshes in unique_meshes_by_class.items():
+                for mesh in unique_meshes:  
+                    if class_name in class_colors:
+                        mesh.paint_uniform_color(class_colors[class_name])   
+                    meshes_to_draw.append(mesh)
+        else:
+            #render all meshes
+            for mesh in frame_meshes:
                 if class_name in class_colors:
-                    mesh.paint_uniform_color(class_colors[class_name])   
-                frame_meshes.append(mesh)
+                        mesh.paint_uniform_color(class_colors[class_name])
+                meshes_to_draw.append(mesh)
+            
         
         placeholder = get_character_placeholder()
         axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
@@ -185,8 +198,8 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
             placeholder = adjust_pose_by_camera_pose(placeholder, frame_camera_translation, frame_camera_rotation)
             axis = adjust_pose_by_camera_pose(axis, frame_camera_translation, frame_camera_rotation)
             
-        frame_meshes.append(placeholder)
-        frame_meshes.append(axis)
+        meshes_to_draw.append(placeholder)
+        meshes_to_draw.append(axis)
         
         global world_landmarks
         landmarks = frame_data.get('landmarks', [])
@@ -194,7 +207,7 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         landmarks_mesh = _point_cloud_from_landmarks(world_landmarks)
         
         vis.clear_geometries()    
-        for mesh in frame_meshes:
+        for mesh in meshes_to_draw:
             vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0) 
             
         if landmarks_mesh is not None:
