@@ -175,5 +175,17 @@ def show_mask(mask, ax, random_color=False):
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
         
+def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
+    pcd = open3d.geometry.PointCloud()
+    pcd.points = open3d.utility.Vector3dVector(pointcloud)
+    pcd.paint_uniform_color(color)
+    
+    distances = pcd.compute_nearest_neighbor_distance()
+    avg_distance = np.mean(distances)
+    radius = avg_distance * 1.5
+    
+    mesh = open3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(pcd, open3d.utility.DoubleVector([radius, radius * 2]))
+    
+    return mesh
 
     

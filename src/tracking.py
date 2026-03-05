@@ -4,7 +4,7 @@ import os
 import msgpack
 
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, image_chunk_from_undistorted
-from src.operations3d import get_3d_bounding_boxes, adjust_rotation_by_chunk_rotation, get_box_meshes
+from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold
         all_3d_bb_poses = []
         for chunk in image_chunks:
             bb_3d_centers, bb_3d_dimensions, bb_3d_poses = get_3d_bounding_boxes(chunk, class_name, threshold=threshold_3d)
-            bb_3d_centers_adjusted, bb_3d_poses_adjusted = adjust_rotation_by_chunk_rotation(bb_3d_centers, bb_3d_poses, chunk)
+            bb_3d_centers_adjusted, bb_3d_poses_adjusted = adjust_bounding_boxes_by_chunk_rotation(bb_3d_centers, bb_3d_poses, chunk)
             all_3d_bb_centers.extend(bb_3d_centers_adjusted)
             all_3d_bb_dimensions.extend(bb_3d_dimensions)
             all_3d_bb_poses.extend(bb_3d_poses_adjusted)

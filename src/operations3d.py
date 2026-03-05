@@ -11,6 +11,7 @@ from detectron2.config import get_cfg
 from detectron2.engine import default_setup
 from detectron2.data import transforms as T
 
+# Ovmono
 sys.path.insert(0, os.path.join(os.getcwd(), 'ovmono3d'))
 
 from ovmono3d.cubercnn.modeling.meta_arch import build_model
@@ -29,6 +30,12 @@ from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
 CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
 CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
+
+# Sam3D
+sys.path.append("sam-3d-objects")
+from inference import Inference
+sam3d_model = Inference("sam-3d-objects/checkpoints/hf/pipeline.yaml", compile=False)
+
 
 def _get_config():
     cfg = get_cfg()
@@ -109,7 +116,7 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
     
     return centers, dimensions, poses
         
-def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
+def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     rotated_centers = []
     rotated_poses = []
     
@@ -141,6 +148,38 @@ def adjust_rotation_by_chunk_rotation(centers, poses, chunk: ImageChunk):
         rotated_poses.append(rotated_pose)
     
     return rotated_centers, rotated_poses
+
+def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
+    rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
+    
+    angle_horizontal_rad, angle_vertical_rad = chunk.angle
+    
+    # horizontal angle rotates around Y-axis
+    rotation_yaw = np.array([
+        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
+        [0, 1, 0],
+        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
+    ])
+    
+    # vertical angle rotates around X-axis
+    rotation_pitch = np.array([
+        [1, 0, 0],
+        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
+        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
+    ])
+    
+    rotation = rotation_pitch @ rotation_yaw
+    
+    rotated_pointcloud.rotate(rotation, center=[0, 0, 0])
+    
+    return rotated_pointcloud
+
+def adjust_pointclouds_by_chunk_rotation(pointclouds, chunks):
+    adjusted_pointclouds = []
+    for pointcloud, chunk in zip(pointclouds, chunks):
+        adjusted_pointcloud = adjust_pointcloud_by_chunk_rotation(pointcloud, chunk)
+        adjusted_pointclouds.append(adjusted_pointcloud)
+    return adjusted_pointclouds
 
 def adjust_pose_by_camera_pose(mesh, camera_translation, camera_rotation):
     adjusted_mesh = open3d.geometry.TriangleMesh(mesh)
@@ -221,4 +260,18 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         mesh = _create_box_mesh(center, dimension, pose, color=color)
         meshes.append(mesh)
     return meshes
+
+def reconstruct_pointcloud_for_chunk(chunk: ImageChunk, mask):
+    reconstruction_output = sam3d_model(chunk.image, mask, seed=42)
+    reconstruction_output["gs"].save_ply("temp/reconstructed_mesh.ply")
+    reconstructed_pointcloud = open3d.io.read_point_cloud("temp/reconstructed_mesh.ply")
+    return reconstructed_pointcloud
+
+def reconstruct_pointclouds_for_chunks(chunks, masks):
+    pointclouds = []
+    for chunk, mask in zip(chunks, masks):
+        pointcloud = reconstruct_pointcloud_for_chunk(chunk, mask)
+        pointclouds.append(pointcloud)
+    return pointclouds
+    
         
