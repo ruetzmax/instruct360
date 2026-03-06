@@ -167,8 +167,7 @@ def get_masks_from_image_chunks(image_chunks, prompt):
         rgba_image[:, :, 3] = 255 
         rgba_image[blank_area, 3] = 0 
 
-        mask_pil = Image.fromarray(rgba_image, mode='RGBA')
-        all_masks.append(mask_pil)
+        all_masks.append(rgba_image)
         
     return all_masks
     

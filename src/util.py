@@ -4,9 +4,17 @@ import open3d
 import torch
 from torchvision.ops import box_convert
 import numpy as np
+import base64
+from io import BytesIO
+from PIL import Image
+import sys
+import os
 
 from src.operations2d import ImageChunk, insv_to_equirect
-from src.operations3d import get_intrinsics_for_chunk
+
+ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
+if ovmono_path not in sys.path:
+    sys.path.insert(0, ovmono_path)
 
 from ovmono3d.cubercnn import util, vis
 
@@ -54,6 +62,8 @@ def draw_bounding_boxes(image, boxes, color=(255, 0, 0), thickness=2):
     return image_with_boxes
 
 def draw_3d_bounding_boxes(chunk: ImageChunk, centers, dimensions, poses):
+    from src.operations3d import get_intrinsics_for_chunk
+    
     boxes = []
     for bb_idx in range(len(centers)):
         center = centers[bb_idx].flatten().tolist() if isinstance(centers[bb_idx], np.ndarray) else list(centers[bb_idx])
@@ -165,15 +175,6 @@ def render_scene(meshes):
         )
     )
     fig.show()
-    
-def show_mask(mask, ax, random_color=False):
-    if random_color:
-        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
         
 def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
     pcd = open3d.geometry.PointCloud()
@@ -187,5 +188,16 @@ def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
     mesh = open3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(pcd, open3d.utility.DoubleVector([radius, radius * 2]))
     
     return mesh
+
+def image_to_base64(image):
+    if isinstance(image, np.ndarray):
+        image_pil = Image.fromarray(image.astype('uint8'))
+    else:
+        image_pil = image
+    
+    buffered = BytesIO()
+    image_pil.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    return img_str
 
     

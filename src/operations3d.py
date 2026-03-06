@@ -1,3 +1,6 @@
+import json
+import subprocess
+
 import open3d
 from src.operations2d import ImageChunk
 import logging
@@ -11,8 +14,11 @@ from detectron2.config import get_cfg
 from detectron2.engine import default_setup
 from detectron2.data import transforms as T
 
+
 # Ovmono
-sys.path.insert(0, os.path.join(os.getcwd(), 'ovmono3d'))
+ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
+if ovmono_path not in sys.path:
+    sys.path.insert(0, ovmono_path)
 
 from ovmono3d.cubercnn.modeling.meta_arch import build_model
 from ovmono3d.cubercnn import util, vis
@@ -20,22 +26,14 @@ from ovmono3d.cubercnn import util, vis
 logger = logging.getLogger("detectron2")
 
 sys.dont_write_bytecode = True
-sys.path.append(os.getcwd())
+if os.getcwd() not in sys.path:
+    sys.path.append(os.getcwd())
 np.set_printoptions(suppress=True)
 
 from ovmono3d.cubercnn.config import get_cfg_defaults
-from cubercnn.modeling.proposal_generator import RPNWithIgnore
-from cubercnn.modeling.roi_heads import ROIHeads3D
-from cubercnn.modeling.backbone import build_dla_from_vision_fpn_backbone
 
 CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
 CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
-
-# Sam3D
-sys.path.append("sam-3d-objects")
-from inference import Inference
-sam3d_model = Inference("sam-3d-objects/checkpoints/hf/pipeline.yaml", compile=False)
-
 
 def _get_config():
     cfg = get_cfg()
@@ -261,17 +259,45 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         meshes.append(mesh)
     return meshes
 
-def reconstruct_pointcloud_for_chunk(chunk: ImageChunk, mask):
-    reconstruction_output = sam3d_model(chunk.image, mask, seed=42)
-    reconstruction_output["gs"].save_ply("temp/reconstructed_mesh.ply")
-    reconstructed_pointcloud = open3d.io.read_point_cloud("temp/reconstructed_mesh.ply")
-    return reconstructed_pointcloud
-
 def reconstruct_pointclouds_for_chunks(chunks, masks):
-    pointclouds = []
-    for chunk, mask in zip(chunks, masks):
-        pointcloud = reconstruct_pointcloud_for_chunk(chunk, mask)
-        pointclouds.append(pointcloud)
-    return pointclouds
+    from src.util import image_to_base64
     
+    # convert chunk images and masks to base64
+    chunk_images_base64 = [image_to_base64(chunk.image) for chunk in chunks]
+    chunk_masks_base64 = [image_to_base64(mask) for mask in masks] 
+    save_dir = "temp/sam3d_output/"
+    chunk_dict = {
+        "chunk_images_base64": chunk_images_base64,
+        "chunk_masks_base64": chunk_masks_base64,
+        "save_dir": save_dir
+    }
+    
+    #do inference in sam3d-objects conda env
+    input_json_path = "temp/sam3d_input.json"
+    os.makedirs(os.path.dirname(input_json_path), exist_ok=True)
+    with open(input_json_path, 'w') as f:
+        json.dump(chunk_dict, f)
+    
+    env = os.environ.copy()
+    env['PYTHONPATH'] = os.getcwd()
+    
+    result = subprocess.run(
+        ["conda", "run", "-n", "sam3d-objects", "python", "src/sam3d_inference.py", input_json_path], 
+        capture_output=True, 
+        text=True,
+        cwd=os.getcwd(),
+        env=env
+    )
+                
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError("SAM3D inference failed")
+    
+    # read out save dir 
+    pointclouds = []
+    for filename in os.listdir(save_dir):
+        if filename.endswith(".ply"):
+            pointcloud = open3d.io.read_point_cloud(os.path.join(save_dir, filename))
+            pointclouds.append(pointcloud)
+    return pointclouds
         
