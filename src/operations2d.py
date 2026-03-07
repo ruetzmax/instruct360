@@ -18,25 +18,14 @@ import sys
 # sys.path.append("segment-anything")
 # from segment_anything import sam_model_registry, SamPredictor
 
-dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
+dino_model = None
+ov_seg_model = None
 
 sys.path.append("ov-seg")
 from open_vocab_seg.utils import VisualizationDemo
 from open_vocab_seg import add_ovseg_config
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
-
-ov_seg_cfg = get_cfg()
-add_deeplab_config(ov_seg_cfg)
-add_ovseg_config(ov_seg_cfg)
-ov_seg_cfg.merge_from_file("ov-seg/configs/ovseg_swinB_vitL_demo.yaml")
-ov_seg_cfg.MODEL.WEIGHTS = "ov-seg/checkpoints/ovseg_swinbase_vitL14_ft_mpt.pth"
-ov_seg_cfg.DATALOADER.NUM_WORKERS = 0
-
-if not torch.cuda.is_available():
-    ov_seg_cfg.MODEL.DEVICE = "cpu"
-    
-ov_seg_model = VisualizationDemo(ov_seg_cfg)
 
 # sam_model = sam_model_registry["vit_h"](checkpoint="ovmono3d/checkpoints/sam_vit_h_4b8939.pth")
 # sam_predictor = SamPredictor(sam_model)
@@ -97,15 +86,26 @@ def insv_to_equirect(left_video_path, right_video_path, output_video_path, stitc
     print(f"Saved equirectangular video to: {output_video_path}")
     
 
-def get_2d_bounding_boxes(image, prompt, threshold=0.35):
+def _get_dino_model():
     global dino_model
+    if dino_model is None:
+        print("Loading GroundingDINO model...")
+        dino_model = load_model(
+            "GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", 
+            "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth"
+        )
+        print("GroundingDINO model loaded.")
+    return dino_model
+
+def get_2d_bounding_boxes(image, prompt, threshold=0.35):
+    model = _get_dino_model()
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     image_tensor = _image_to_tensor(image)
     
     boxes, logits, phrases = predict(
-        model=dino_model,
+        model=model,
         image=image_tensor,
         caption=prompt,
         box_threshold=threshold,
@@ -159,12 +159,28 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700),
 def image_chunk_from_undistorted(image: np.array):
     return ImageChunk(image=image, center=(0.5, 0.5), angle=(0.0, 0.0), fov=(117, 117)) #using specs of OnePlus 7 Pro
 
-def get_masks_from_image_chunks(image_chunks, prompt): 
+def _get_ov_seg_model():
     global ov_seg_model
+    if ov_seg_model is None:
+        print("Loading OV-Seg model...")
+        ov_seg_cfg = get_cfg()
+        add_deeplab_config(ov_seg_cfg)
+        add_ovseg_config(ov_seg_cfg)
+        ov_seg_cfg.merge_from_file("ov-seg/configs/ovseg_swinB_vitL_demo.yaml")
+        ov_seg_cfg.MODEL.WEIGHTS = "ov-seg/checkpoints/ovseg_swinbase_vitL14_ft_mpt.pth"
+        ov_seg_cfg.DATALOADER.NUM_WORKERS = 0
+        if not torch.cuda.is_available():
+            ov_seg_cfg.MODEL.DEVICE = "cpu"
+        ov_seg_model = VisualizationDemo(ov_seg_cfg)
+        print("OV-Seg model loaded.")
+    return ov_seg_model
+
+def get_masks_from_image_chunks(image_chunks, prompt): 
+    model = _get_ov_seg_model()
 
     all_masks = []
     for image_chunk in image_chunks:
-        predictions, _ = ov_seg_model.run_on_image(image_chunk.image, [prompt])
+        predictions, _ = model.run_on_image(image_chunk.image, [prompt])
         
         if not "sem_seg" in predictions:
             return []
