@@ -10,6 +10,10 @@ from py360convert import e2p
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+if os.getenv("FORCE_CPU_MODE", "0") == "1":
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 import torch
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
@@ -21,11 +25,6 @@ import sys
 dino_model = None
 ov_seg_model = None
 
-sys.path.append("ov-seg")
-from open_vocab_seg.utils import VisualizationDemo
-from open_vocab_seg import add_ovseg_config
-from detectron2.config import get_cfg
-from detectron2.projects.deeplab import add_deeplab_config
 
 # sam_model = sam_model_registry["vit_h"](checkpoint="ovmono3d/checkpoints/sam_vit_h_4b8939.pth")
 # sam_predictor = SamPredictor(sam_model)
@@ -90,11 +89,15 @@ def _get_dino_model():
     global dino_model
     if dino_model is None:
         print("Loading GroundingDINO model...")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {device}")
         dino_model = load_model(
             "GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", 
-            "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth"
+            "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth",
+            device=device
         )
-        print("GroundingDINO model loaded.")
+        print(f"GroundingDINO model loaded.")
+            
     return dino_model
 
 def get_2d_bounding_boxes(image, prompt, threshold=0.35):
@@ -163,6 +166,13 @@ def _get_ov_seg_model():
     global ov_seg_model
     if ov_seg_model is None:
         print("Loading OV-Seg model...")
+        import sys
+        sys.path.append("ov-seg")
+        from open_vocab_seg.utils import VisualizationDemo
+        from open_vocab_seg import add_ovseg_config
+        from detectron2.config import get_cfg
+        from detectron2.projects.deeplab import add_deeplab_config
+        
         ov_seg_cfg = get_cfg()
         add_deeplab_config(ov_seg_cfg)
         add_ovseg_config(ov_seg_cfg)

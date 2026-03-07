@@ -37,6 +37,9 @@ if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
     CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
     CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
 
+    # Lazy loading for ovmono model to prevent hanging on HPC clusters
+    ovmono_model = None
+
     def _get_config():
         cfg = get_cfg()
         get_cfg_defaults(cfg)
@@ -55,20 +58,25 @@ if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
         default_setup(cfg, None)
         return cfg
 
-    # change directory to ovmono3d during model loading
-    ovmono_model = None
-    original_dir = os.getcwd()
-    os.chdir(os.path.join(original_dir, 'ovmono3d'))
+    def _get_ovmono_model():
+        global ovmono_model
+        if ovmono_model is None:
+            print("Loading OVMono3D model...")
+            # change directory to ovmono3d during model loading
+            original_dir = os.getcwd()
+            os.chdir(os.path.join(original_dir, 'ovmono3d'))
 
-    try:
-        cfg = _get_config()
-        ovmono_model = build_model(cfg)
+            try:
+                cfg = _get_config()
+                ovmono_model = build_model(cfg)
 
-        DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
-            CHECKPOINT_PATH, resume=True
-        )
-    finally:
-            os.chdir(original_dir)
+                DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
+                    CHECKPOINT_PATH, resume=True
+                )
+                print("OVMono3D model loaded.")
+            finally:
+                os.chdir(original_dir)
+        return ovmono_model
         
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):
@@ -90,9 +98,9 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
 
 def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
     
-    global ovmono_model
+    model = _get_ovmono_model()
 
-    ovmono_model.eval()
+    model.eval()
     
     h, w, _ = chunk.image.shape
     K = get_intrinsics_for_chunk(chunk)
@@ -102,7 +110,7 @@ def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
         'image': torch.as_tensor(np.ascontiguousarray(chunk.image.transpose(2, 0, 1))).cpu(), 
         'height': h, 'width': w, 'K': K, 'category_list': categories
     }]
-    predictions = ovmono_model(batched)[0]['instances']
+    predictions = model(batched)[0]['instances']
     
     centers, dimensions, poses = [], [], []
     for pred_idx in range(len(predictions)):
