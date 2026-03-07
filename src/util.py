@@ -12,11 +12,12 @@ import os
 
 from src.operations2d import ImageChunk, insv_to_equirect
 
-ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
-if ovmono_path not in sys.path:
-    sys.path.insert(0, ovmono_path)
+if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
+    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
+    if ovmono_path not in sys.path:
+        sys.path.insert(0, ovmono_path)
 
-from ovmono3d.cubercnn import util, vis
+    from ovmono3d.cubercnn import util, vis
 
 from open3d.visualization import draw_geometries
 

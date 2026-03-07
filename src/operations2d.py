@@ -6,11 +6,19 @@ import groundingdino.datasets.transforms as T
 from typing import Tuple
 from PIL import Image
 from py360convert import e2p
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import torch
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
 
 import sys
 # sys.path.append("segment-anything")
 # from segment_anything import sam_model_registry, SamPredictor
+
+dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
 
 sys.path.append("ov-seg")
 from open_vocab_seg.utils import VisualizationDemo
@@ -18,21 +26,22 @@ from open_vocab_seg import add_ovseg_config
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 
-dino_model = load_model("GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py", "ovmono3d/checkpoints/groundingdino_swinb_cogcoor.pth")
-
-# sam_model = sam_model_registry["vit_h"](checkpoint="ovmono3d/checkpoints/sam_vit_h_4b8939.pth")
-# sam_predictor = SamPredictor(sam_model)
-
 ov_seg_cfg = get_cfg()
 add_deeplab_config(ov_seg_cfg)
 add_ovseg_config(ov_seg_cfg)
 ov_seg_cfg.merge_from_file("ov-seg/configs/ovseg_swinB_vitL_demo.yaml")
 ov_seg_cfg.MODEL.WEIGHTS = "ov-seg/checkpoints/ovseg_swinbase_vitL14_ft_mpt.pth"
+ov_seg_cfg.DATALOADER.NUM_WORKERS = 0
 
 if not torch.cuda.is_available():
     ov_seg_cfg.MODEL.DEVICE = "cpu"
     
 ov_seg_model = VisualizationDemo(ov_seg_cfg)
+
+# sam_model = sam_model_registry["vit_h"](checkpoint="ovmono3d/checkpoints/sam_vit_h_4b8939.pth")
+# sam_predictor = SamPredictor(sam_model)
+
+
 
 class ImageChunk:
     def __init__(self, image: np.array, center: Tuple[float, float], angle: Tuple[float, float], fov: Tuple[float, float]):
@@ -103,6 +112,8 @@ def get_2d_bounding_boxes(image, prompt, threshold=0.35):
         text_threshold=0.25,
         device=device
     )
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
     return boxes.numpy()
 
@@ -148,8 +159,9 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700),
 def image_chunk_from_undistorted(image: np.array):
     return ImageChunk(image=image, center=(0.5, 0.5), angle=(0.0, 0.0), fov=(117, 117)) #using specs of OnePlus 7 Pro
 
-def get_masks_from_image_chunks(image_chunks, prompt):
+def get_masks_from_image_chunks(image_chunks, prompt): 
     global ov_seg_model
+
     all_masks = []
     for image_chunk in image_chunks:
         predictions, _ = ov_seg_model.run_on_image(image_chunk.image, [prompt])

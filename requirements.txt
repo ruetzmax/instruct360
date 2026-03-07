@@ -3,3 +3,4 @@ git+https://github.com/facebookresearch/segment-anything.git
 py360convert
 tqdm
 msgpack
+open3d

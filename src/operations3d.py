@@ -15,58 +15,60 @@ from detectron2.engine import default_setup
 from detectron2.data import transforms as T
 
 
-# Ovmono
-ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
-if ovmono_path not in sys.path:
-    sys.path.insert(0, ovmono_path)
 
-from ovmono3d.cubercnn.modeling.meta_arch import build_model
-from ovmono3d.cubercnn import util, vis
+if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
+    # Ovmono
+    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
+    if ovmono_path not in sys.path:
+        sys.path.insert(0, ovmono_path)
 
-logger = logging.getLogger("detectron2")
+    from ovmono3d.cubercnn.modeling.meta_arch import build_model
+    from ovmono3d.cubercnn import util, vis
 
-sys.dont_write_bytecode = True
-if os.getcwd() not in sys.path:
-    sys.path.append(os.getcwd())
-np.set_printoptions(suppress=True)
+    logger = logging.getLogger("detectron2")
 
-from ovmono3d.cubercnn.config import get_cfg_defaults
+    sys.dont_write_bytecode = True
+    if os.getcwd() not in sys.path:
+        sys.path.append(os.getcwd())
+    np.set_printoptions(suppress=True)
 
-CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
-CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
+    from ovmono3d.cubercnn.config import get_cfg_defaults
 
-def _get_config():
-    cfg = get_cfg()
-    get_cfg_defaults(cfg)
+    CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
+    CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
 
-    global CONFIG_PATH, CHECKPOINT_PATH
+    def _get_config():
+        cfg = get_cfg()
+        get_cfg_defaults(cfg)
 
-    # store locally if needed
-    if CONFIG_PATH.startswith(util.CubeRCNNHandler.PREFIX):    
-        CONFIG_PATH = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, CONFIG_PATH)
+        global CONFIG_PATH, CHECKPOINT_PATH
 
-    cfg.merge_from_file(CONFIG_PATH)
-    
-    cfg.MODEL.ROI_HEADS.NAME = "ROIHeads3DGDINO"
-    
-    cfg.freeze()
-    default_setup(cfg, None)
-    return cfg
+        # store locally if needed
+        if CONFIG_PATH.startswith(util.CubeRCNNHandler.PREFIX):    
+            CONFIG_PATH = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, CONFIG_PATH)
 
-# change directory to ovmono3d during model loading
-ovmono_model = None
-original_dir = os.getcwd()
-os.chdir(os.path.join(original_dir, 'ovmono3d'))
+        cfg.merge_from_file(CONFIG_PATH)
+        
+        cfg.MODEL.ROI_HEADS.NAME = "ROIHeads3DGDINO"
+        
+        cfg.freeze()
+        default_setup(cfg, None)
+        return cfg
 
-try:
-    cfg = _get_config()
-    ovmono_model = build_model(cfg)
+    # change directory to ovmono3d during model loading
+    ovmono_model = None
+    original_dir = os.getcwd()
+    os.chdir(os.path.join(original_dir, 'ovmono3d'))
 
-    DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
-        CHECKPOINT_PATH, resume=True
-    )
-finally:
-        os.chdir(original_dir)
+    try:
+        cfg = _get_config()
+        ovmono_model = build_model(cfg)
+
+        DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
+            CHECKPOINT_PATH, resume=True
+        )
+    finally:
+            os.chdir(original_dir)
         
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):

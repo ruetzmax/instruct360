@@ -1,14 +1,27 @@
 # About
-Extract 3d bounding boxes for arbitrary classes from a equirectangular panorama images / videos.
+Reconstruct scene information from omnidirectional video input. Pipeline allows for execution of arbitrary operations (=payloads) on perspective images of objects of interest, taken from the panorama. Multiple payloads are available. Ovmono extracts 3d bounding boxes for arbitrary classes. Sam3D reconstructs object meshes.
 
 # Setup
 1. Clone the repo and cd into it
 2. `conda create -n instruct360 python=3.8.20 && conda activate instruct360`
-3. `pip install -r requirements.txt`
+3. `pip install -r requirements.txt` 
+
+Ovmono payload (supported on CPU and GPU):
 4. Follow the [Ovmono3D installation instructions](https://github.com/UVA-Computer-Vision-Lab/ovmono3d/tree/main?tab=readme-ov-file#installation-) inside of the root folder, but use the instruct360 conda environment. (For CPU execution, use [this fork](https://github.com/ruetzmax/ovmono3d) instead)
 5. Follow the [GroundingDINO installation instructions](https://github.com/IDEA-Research/GroundingDINO?tab=readme-ov-file#hammer_and_wrench-install) inside of the root folder
-6. Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
-7. Install [ov-seg](https://github.com/facebookresearch/ov-seg) and place the pretrained weights inside the ov-seg/checkpoints folder
+
+
+Sam3d payload (only GPU):
+4. Install [cuda toolkit 11.3](https://developer.nvidia.com/cuda-11.3.0-download-archive)
+5. Install [ov-seg](https://github.com/facebookresearch/ov-seg) and place the pretrained weights inside the ov-seg/checkpoints folder
+6. Follow the [GroundingDINO installation instructions](https://github.com/IDEA-Research/GroundingDINO?tab=readme-ov-file#hammer_and_wrench-install) inside of the root folder
+7. Install [sam3d](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md) in a separate conda env "sam3d-objects" but clone it into the project root
+
+OPTIONAL - for SLAM / camera postion tracking
+- Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
+
+You can set the payload used by setting the env var `INSTRUCT360_PAYLOAD=<ovmono/sam3d>`
+
 
 # Inference
 To infere 3D object bounding boxes from a video, run:
