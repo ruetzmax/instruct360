@@ -1,86 +1,30 @@
-import json
-import subprocess
-import base64
+import os
+import numpy as np
 
 import open3d
 from src.operations2d import ImageChunk
-import logging
-import os
-import sys
-import numpy as np
-import torch
-import cv2
-
-from detectron2.checkpoint import DetectionCheckpointer
-from detectron2.config import get_cfg
-from detectron2.engine import default_setup
-from detectron2.data import transforms as T
+from src.inference import CondaInferenceRunner, image_to_base64
 
 
+_ovmono_runner = None
+_sam3d_runner = None
 
-if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
-    # Ovmono
-    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
-    if ovmono_path not in sys.path:
-        sys.path.insert(0, ovmono_path)
 
-    from ovmono3d.cubercnn.modeling.meta_arch import build_model
-    from ovmono3d.cubercnn import util, vis
+def _get_ovmono_runner(env_name="ovmono"):
+    global _ovmono_runner
+    if _ovmono_runner is None:
+        _ovmono_runner = CondaInferenceRunner(env_name, "ovmono_inference.py")
+    return _ovmono_runner
 
-    logger = logging.getLogger("detectron2")
 
-    sys.dont_write_bytecode = True
-    if os.getcwd() not in sys.path:
-        sys.path.append(os.getcwd())
-    np.set_printoptions(suppress=True)
-
-    from ovmono3d.cubercnn.config import get_cfg_defaults
-
-    CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
-    CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
-
-    ovmono_model = None
-
-    def _get_config():
-        cfg = get_cfg()
-        get_cfg_defaults(cfg)
-
-        global CONFIG_PATH, CHECKPOINT_PATH
-
-        # store locally if needed
-        if CONFIG_PATH.startswith(util.CubeRCNNHandler.PREFIX):    
-            CONFIG_PATH = util.CubeRCNNHandler._get_local_path(util.CubeRCNNHandler, CONFIG_PATH)
-
-        cfg.merge_from_file(CONFIG_PATH)
-        
-        cfg.MODEL.ROI_HEADS.NAME = "ROIHeads3DGDINO"
-        
-        cfg.freeze()
-        default_setup(cfg, None)
-        return cfg
-
-    def _get_ovmono_model():
-        global ovmono_model
-        if ovmono_model is None:
-            print("Loading OVMono3D model...")
-            original_dir = os.getcwd()
-            os.chdir(os.path.join(original_dir, 'ovmono3d'))
-
-            try:
-                cfg = _get_config()
-                ovmono_model = build_model(cfg)
-
-                DetectionCheckpointer(ovmono_model, save_dir="temp").resume_or_load(
-                    CHECKPOINT_PATH, resume=True
-                )
-                print("OVMono3D model loaded.")
-            finally:
-                os.chdir(original_dir)
-        return ovmono_model
+def _get_sam3d_runner(env_name="sam3d-objects"):
+    global _sam3d_runner
+    if _sam3d_runner is None:
+        _sam3d_runner = CondaInferenceRunner(env_name, "sam3d_inference.py")
+    return _sam3d_runner
         
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):
-    #calculate focal length from fov
     fov_x, fov_y = chunk.fov
     h, w, _ = chunk.image.shape
     focal_length_x = (w / 2) / np.tan(np.radians(fov_x) / 2)
@@ -96,31 +40,27 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
     
     return K
 
-def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3):
-    
-    model = _get_ovmono_model()
 
-    model.eval()
+def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono"):
+    runner = _get_ovmono_runner(ovmono_env)
     
     h, w, _ = chunk.image.shape
     K = get_intrinsics_for_chunk(chunk)
-    categories = [prompt]
-
-    batched = [{
-        'image': torch.as_tensor(np.ascontiguousarray(chunk.image.transpose(2, 0, 1))).cpu(), 
-        'height': h, 'width': w, 'K': K, 'category_list': categories
-    }]
-    predictions = model(batched)[0]['instances']
     
-    centers, dimensions, poses = [], [], []
-    for pred_idx in range(len(predictions)):
-        pred = predictions[pred_idx]
-        if pred.scores.item() < threshold:
-            continue
-        
-        centers.append(pred.pred_center_cam.detach().cpu().numpy())
-        dimensions.append(pred.pred_dimensions.detach().cpu().numpy())
-        poses.append(pred.pred_pose.detach().cpu().numpy())
+    input_data = {
+        "image_base64": image_to_base64(chunk.image),
+        "prompt": prompt,
+        "threshold": threshold,
+        "intrinsics": K.tolist(),
+        "height": h,
+        "width": w
+    }
+    
+    output_data = runner.run(input_data)
+    
+    centers = [np.array(c) for c in output_data["centers"]]
+    dimensions = [np.array(d) for d in output_data["dimensions"]]
+    poses = [np.array(p) for p in output_data["poses"]]
     
     return centers, dimensions, poses
         
@@ -269,57 +209,22 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         meshes.append(mesh)
     return meshes
 
-def _image_to_base64(image):
-    if not isinstance(image, np.ndarray):
-        raise TypeError("Image must be a numpy array")
+def reconstruct_pointclouds_for_chunks(chunks, masks, sam3d_env="sam3d-objects"):
+    runner = _get_sam3d_runner(sam3d_env)
     
-    if image.dtype != np.uint8:
-        image = image.astype('uint8')
-    
-    success, encoded_image = cv2.imencode('.png', image)
-    if not success:
-        raise RuntimeError("Failed to encode image to PNG")
-    
-    img_str = base64.b64encode(encoded_image.tobytes()).decode('utf-8')
-    return img_str
-
-def reconstruct_pointclouds_for_chunks(chunks, masks):
-    # convert chunk images and masks to base64
-    chunk_images_base64 = [_image_to_base64(chunk.image) for chunk in chunks]
-    chunk_masks_base64 = [_image_to_base64(mask) for mask in masks] 
     save_dir = "temp/sam3d_output/"
-    chunk_dict = {
-        "chunk_images_base64": chunk_images_base64,
-        "chunk_masks_base64": chunk_masks_base64,
+    input_data = {
+        "chunk_images_base64": [image_to_base64(chunk.image) for chunk in chunks],
+        "chunk_masks_base64": [image_to_base64(mask) for mask in masks],
         "save_dir": save_dir
     }
     
-    input_json_path = "temp/sam3d_input.json"
-    os.makedirs(os.path.dirname(input_json_path), exist_ok=True)
-    with open(input_json_path, 'w') as f:
-        json.dump(chunk_dict, f)
+    output_data = runner.run(input_data)
     
-    #do inference in sam3d-objects conda env
-    env = os.environ.copy()
-    env['PYTHONPATH'] = os.getcwd()
-    
-    result = subprocess.run(
-        ["conda", "run", "-n", "sam3d-objects", "python", "src/sam3d_inference.py", input_json_path], 
-        capture_output=True, 
-        text=True,
-        cwd=os.getcwd(),
-        env=env
-    )
-                
-    if result.returncode != 0:
-        print(result.stderr)
-        raise RuntimeError("SAM3D inference failed")
-    
-    # read out save dir 
     pointclouds = []
-    for filename in os.listdir(save_dir):
-        if filename.endswith(".ply"):
-            pointcloud = open3d.io.read_point_cloud(os.path.join(save_dir, filename))
-            pointclouds.append(pointcloud)
+    for ply_path in output_data["ply_paths"]:
+        pointcloud = open3d.io.read_point_cloud(ply_path)
+        pointclouds.append(pointcloud)
+    
     return pointclouds
         

@@ -1,21 +1,11 @@
-import base64
 import os
-import sys, json
-import numpy as np
-import cv2
+import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def base64_to_image(img_str):
-    img_data = base64.b64decode(img_str)
-    nparr = np.frombuffer(img_data, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image
+from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
-# Read input data from JSON file path
-input_json_path = sys.argv[1]
-with open(input_json_path, 'r') as f:
-    input_data = json.load(f)
+input_data = load_inference_input()
 
 sys.path.append("sam-3d-objects")
 from inference import Inference
@@ -34,6 +24,7 @@ else:
         if os.path.isfile(file_path):
             os.unlink(file_path)
 
+ply_paths = []
 for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64, chunk_masks_base64)):
     chunk_image = base64_to_image(chunk_image_b64)
     chunk_mask = base64_to_image(chunk_mask_b64)
@@ -45,4 +36,14 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
     
     reconstruction_output = sam3d_model(chunk_image, chunk_mask, seed=42)
     reconstruction_output["gs"].save_ply(save_path)
+    
+    ply_paths.append(save_path)
+    print(f"Saved point cloud {idx+1}/{len(chunk_images_base64)} to {save_path}")
+
+output_data = {
+    "ply_paths": ply_paths
+}
+
+save_inference_output(output_data)
+print(f"Generated {len(ply_paths)} point clouds")
 

@@ -1,0 +1,55 @@
+import base64
+import json
+import sys
+import cv2
+import numpy as np
+
+
+def base64_to_image(img_str):
+    img_data = base64.b64decode(img_str)
+    nparr = np.frombuffer(img_data, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+    
+    if len(image.shape) == 2:
+        # Grayscale - convert to RGB
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    elif image.shape[2] == 3:
+        # BGR - convert to RGB
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    elif image.shape[2] == 4:
+        # BGRA - convert to RGBA
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+    
+    return image
+
+
+def image_to_base64(image):
+    if len(image.shape) == 3 and image.shape[2] == 4:
+        # RGBA image - convert RGBA to BGRA for cv2
+        image_bgra = cv2.cvtColor(image, cv2.COLOR_RGBA2BGRA)
+        _, buffer = cv2.imencode('.png', image_bgra)
+    else:
+        # RGB image - convert RGB to BGR for cv2
+        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        _, buffer = cv2.imencode('.png', image_bgr)
+    
+    img_str = base64.b64encode(buffer).decode('utf-8')
+    return img_str
+
+
+def load_inference_input():
+    if len(sys.argv) < 2:
+        raise ValueError("Usage: python script.py <input_json> [output_json]")
+    
+    input_json_path = sys.argv[1]
+    with open(input_json_path, 'r') as f:
+        return json.load(f)
+
+
+def save_inference_output(output_data):
+    if len(sys.argv) < 3:
+        raise ValueError("Output JSON path not specified in command line args")
+    
+    output_json_path = sys.argv[2]
+    with open(output_json_path, 'w') as f:
+        json.dump(output_data, f)
