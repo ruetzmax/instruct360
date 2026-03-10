@@ -90,7 +90,7 @@ def main():
         video_path=args.video_path,
         classes=args.classes,
         output_dir=args.output_dir,
-        frame_index=args.frame_index
+        frame_index=args.frame_index,
         input_pkl=args.input_pkl,
         output_pkl=args.output_pkl
     )
