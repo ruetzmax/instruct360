@@ -5,7 +5,8 @@ from typing import Tuple
 from PIL import Image
 from py360convert import e2p
 
-from src.inference import CondaInferenceRunner, image_to_base64, base64_to_image
+from src.inference.conda_inference import CondaInferenceRunner
+from src.inference.inference_utils import image_to_base64, base64_to_image
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"

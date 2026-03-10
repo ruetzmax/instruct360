@@ -3,7 +3,8 @@ import numpy as np
 
 import open3d
 from src.operations2d import ImageChunk
-from src.inference import CondaInferenceRunner, image_to_base64
+from src.inference.conda_inference import CondaInferenceRunner
+from src.inference.inference_utils import image_to_base64
 
 
 _ovmono_runner = None

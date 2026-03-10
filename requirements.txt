@@ -4,3 +4,6 @@ py360convert
 tqdm
 msgpack
 open3d
+opencv-python
+torch
+torchvision

@@ -2,6 +2,11 @@ import os
 import sys
 import numpy as np
 import torch
+import warnings
+
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
+
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -56,7 +61,7 @@ for idx, chunk_image_b64 in enumerate(chunk_images_b64):
     
     # construct and return masked image
     sem_seg = predictions["sem_seg"]
-    blank_area = (sem_seg[0] == 0)
+    blank_area = (sem_seg[0] == 0).cpu().numpy()
     
     masked_image = chunk_image.copy()
     rgba_image = np.zeros((masked_image.shape[0], masked_image.shape[1], 4), dtype=np.uint8)

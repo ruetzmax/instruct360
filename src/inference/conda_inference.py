@@ -26,7 +26,7 @@ class CondaInferenceRunner:
             json.dump(input_data, f)
         
         # execute command
-        cmd = f"conda run -n {self.env_name} python {self.script_path} {input_json} {output_json}"
+        cmd = f"PYTHONWARNINGS=ignore conda run --no-capture-output -n {self.env_name} python {self.script_path} {input_json} {output_json}"
         
         if verbose:
             print(f"Running {base_name} in conda environment '{self.env_name}'...")
@@ -40,7 +40,8 @@ class CondaInferenceRunner:
                 error_msg += f"\nStderr: {result.stderr}"
             if result.stdout:
                 error_msg += f"\nStdout: {result.stdout}"
-            raise RuntimeError(error_msg)
+            # raise RuntimeError(error_msg)
+            print(error_msg)
         
         if verbose and result.stdout:
             print(result.stdout)

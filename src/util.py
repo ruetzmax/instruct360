@@ -8,14 +8,7 @@ import base64
 import sys
 import os
 
-from src.operations2d import ImageChunk, insv_to_equirect
-
-if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
-    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
-    if ovmono_path not in sys.path:
-        sys.path.insert(0, ovmono_path)
-
-    from ovmono3d.cubercnn import util, vis
+from src.operations2d import ImageChunk, insv_to_equirect    
 
 from open3d.visualization import draw_geometries
 
@@ -61,6 +54,12 @@ def draw_bounding_boxes(image, boxes, color=(255, 0, 0), thickness=2):
     return image_with_boxes
 
 def draw_3d_bounding_boxes(chunk: ImageChunk, centers, dimensions, poses):
+    
+    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
+    if ovmono_path not in sys.path:
+        sys.path.insert(0, ovmono_path)
+
+    from ovmono3d.cubercnn import util, vis
     from src.operations3d import get_intrinsics_for_chunk
     
     boxes = []
