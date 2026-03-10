@@ -74,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--orientation",
         type=str,
-        default='vertical',
+        default='horizontal',
         choices=['vertical', 'horizontal'],
         help="Orientation of the 360 camera"
     )
