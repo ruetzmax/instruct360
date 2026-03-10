@@ -26,7 +26,7 @@ class CondaInferenceRunner:
             json.dump(input_data, f)
         
         # execute command
-        cmd = f"PYTHONWARNINGS=ignore conda run --no-capture-output -n {self.env_name} python {self.script_path} {input_json} {output_json}"
+        cmd = f"conda run -n {self.env_name} python {self.script_path} {input_json} {output_json}"
         
         if verbose:
             print(f"Running {base_name} in conda environment '{self.env_name}'...")

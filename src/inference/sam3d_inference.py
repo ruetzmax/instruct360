@@ -7,9 +7,10 @@ from inference_utils import base64_to_image, load_inference_input, save_inferenc
 
 input_data = load_inference_input()
 
-sys.path.append("sam-3d-objects")
+workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.join(workspace_root, "sam-3d-objects", "notebook"))
 from inference import Inference
-sam3d_model = Inference("sam-3d-objects/checkpoints/hf/pipeline.yaml", compile=False)
+sam3d_model = Inference(os.path.join(workspace_root, "sam-3d-objects/checkpoints/hf/pipeline.yaml"), compile=False)
 
 chunk_images_base64 = input_data["chunk_images_base64"]
 chunk_masks_base64 = input_data["chunk_masks_base64"]

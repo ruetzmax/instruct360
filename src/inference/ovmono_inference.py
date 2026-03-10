@@ -17,8 +17,11 @@ ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
 if ovmono_path not in sys.path:
     sys.path.insert(0, ovmono_path)
 
-from ovmono3d.cubercnn.modeling.meta_arch import build_model
-from ovmono3d.cubercnn import util
+from cubercnn.modeling.meta_arch import build_model
+from cubercnn import util
+import cubercnn.modeling.backbone 
+import cubercnn.modeling.roi_heads
+import cubercnn.modeling.proposal_generator
 
 logger = logging.getLogger("detectron2")
 sys.dont_write_bytecode = True
@@ -26,7 +29,7 @@ if os.getcwd() not in sys.path:
     sys.path.append(os.getcwd())
 np.set_printoptions(suppress=True)
 
-from ovmono3d.cubercnn.config import get_cfg_defaults
+from cubercnn.config import get_cfg_defaults
 
 CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
 CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"

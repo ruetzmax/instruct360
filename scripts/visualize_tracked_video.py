@@ -1,5 +1,6 @@
 
 import argparse
+import os
 import time
 from pathlib import Path
 import pickle
@@ -31,6 +32,8 @@ pose_change_threshold = 0.3
 unique_meshes_by_class = {}
 
 world_landmarks = []
+
+static_geometries = []
 
 ENABLE_FILTERING = False
 
@@ -117,6 +120,7 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         frame_meshes = []
         meshes_to_draw = []
         
+        # add 3d bounding box meshes
         class_dicts = frame_data['classes']
         for class_dict in class_dicts:
             class_name = class_dict['class_name']
@@ -189,8 +193,16 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                 if class_name in class_colors:
                         mesh.paint_uniform_color(class_colors[class_name])
                 meshes_to_draw.append(mesh)
-            
+                
+        # add reconstructed pointclouds as static geometry
+        pointcloud_path = frame_data.get('pointcloud_path', None)
+        if pointcloud_path and os.path.exists(pointcloud_path):
+            pointcloud = open3d.io.read_point_cloud(pointcloud_path)
+            if frame_camera_translation and frame_camera_rotation:
+                pointcloud = adjust_pose_by_camera_pose(pointcloud, frame_camera_translation, frame_camera_rotation)
+            static_geometries.append(pointcloud)
         
+        # add character
         placeholder = get_character_placeholder()
         axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
 
@@ -201,17 +213,20 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         meshes_to_draw.append(placeholder)
         meshes_to_draw.append(axis)
         
+        # add landmarks
         global world_landmarks
         landmarks = frame_data.get('landmarks', [])
         world_landmarks.extend(landmarks)
-        landmarks_mesh = _point_cloud_from_landmarks(world_landmarks)
+        if world_landmarks:
+            landmarks_pointcloud = _point_cloud_from_landmarks(world_landmarks)
+            meshes_to_draw.append(landmarks_pointcloud)
         
+        # draw geometries
         vis.clear_geometries()    
         for mesh in meshes_to_draw:
+            vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0)
+        for mesh in static_geometries:
             vis.add_geometry(mesh, reset_bounding_box=frame_idx == 0) 
-            
-        if landmarks_mesh is not None:
-            vis.add_geometry(landmarks_mesh, reset_bounding_box=False) 
         
         print(f"Frame {frame_idx + 1}/{len(frames_data)}")
     

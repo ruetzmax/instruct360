@@ -11,7 +11,7 @@ _ovmono_runner = None
 _sam3d_runner = None
 
 
-def _get_ovmono_runner(env_name="ovmono"):
+def _get_ovmono_runner(env_name="ovmono3d"):
     global _ovmono_runner
     if _ovmono_runner is None:
         _ovmono_runner = CondaInferenceRunner(env_name, "ovmono_inference.py")
@@ -42,7 +42,7 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
     return K
 
 
-def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono"):
+def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono3d"):
     runner = _get_ovmono_runner(ovmono_env)
     
     h, w, _ = chunk.image.shape
@@ -130,20 +130,26 @@ def adjust_pointclouds_by_chunk_rotation(pointclouds, chunks):
         adjusted_pointclouds.append(adjusted_pointcloud)
     return adjusted_pointclouds
 
-def adjust_pose_by_camera_pose(mesh, camera_translation, camera_rotation):
-    adjusted_mesh = open3d.geometry.TriangleMesh(mesh)
+def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
+    # create copy
+    if isinstance(geometry, open3d.geometry.TriangleMesh):
+        adjusted_geometry = open3d.geometry.TriangleMesh(geometry)
+    elif isinstance(geometry, open3d.geometry.PointCloud):
+        adjusted_geometry = open3d.geometry.PointCloud(geometry)
+    else:
+        raise TypeError(f"Unsupported geometry type: {type(geometry)}")
         
-    # rotate opencv mesh by camera rotation
-    rot_mat = mesh.get_rotation_matrix_from_quaternion(camera_rotation)
-    rot_180_z = mesh.get_rotation_matrix_from_axis_angle([0, 0, np.pi])
+    # rotate opencv geometry by camera rotation
+    rot_mat = open3d.geometry.get_rotation_matrix_from_quaternion(camera_rotation)
+    rot_180_z = open3d.geometry.get_rotation_matrix_from_axis_angle([0, 0, np.pi])
     rot_mat = rot_180_z @ rot_mat
-    adjusted_mesh.rotate(rot_mat, center=[0, 0, 0])
+    adjusted_geometry.rotate(rot_mat, center=[0, 0, 0])
     
-    # translate opencv mesh by camera translation
+    # translate opencv geometry by camera translation
     camera_translation = [camera_translation[2], camera_translation[1], camera_translation[0]]
-    adjusted_mesh.translate(camera_translation)
+    adjusted_geometry.translate(camera_translation)
     
-    return adjusted_mesh
+    return adjusted_geometry
     
 def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
     # create opencv box mesh
