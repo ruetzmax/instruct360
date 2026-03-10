@@ -1,10 +1,11 @@
 import subprocess
 import os
 
+from matplotlib import image
 import msgpack
 
-from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, image_chunk_from_undistorted
-from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes
+from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
+from src.operations3d import adjust_pointclouds_by_chunk_rotation, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_pointclouds_for_chunks, reconstruct_pointclouds_for_chunks
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
@@ -132,3 +133,10 @@ def track_camera_poses(video_path, video_format='equirectangular'):
             camera_poses.append(frame_dict)
     return camera_poses
         
+def reconstruct_pointclouds_for_class(image, class_name):
+    bounding_boxes_2d = get_2d_bounding_boxes(image, class_name)
+    image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation="horizontal")
+    masks = get_masks_from_image_chunks(image_chunks, prompt=class_name)
+    pointclouds = reconstruct_pointclouds_for_chunks(image_chunks, masks)
+    adjusted_pointclouds = adjust_pointclouds_by_chunk_rotation(pointclouds, image_chunks)
+    return adjusted_pointclouds

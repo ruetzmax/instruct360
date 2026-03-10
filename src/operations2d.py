@@ -11,8 +11,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-if os.getenv("FORCE_CPU_MODE", "0") == "1":
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# if os.getenv("FORCE_CPU_MODE", "0") == "1":
+#     os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import torch
 torch.set_num_threads(1)

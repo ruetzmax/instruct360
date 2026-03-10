@@ -37,7 +37,6 @@ if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
     CONFIG_PATH = "configs/OVMono3D_dinov2_SFP.yaml"
     CHECKPOINT_PATH = "checkpoints/ovmono3d_lift.pth"
 
-    # Lazy loading for ovmono model to prevent hanging on HPC clusters
     ovmono_model = None
 
     def _get_config():
@@ -62,7 +61,6 @@ if os.getenv("INSTRUCT360_PAYLOAD", "ovmono") == "ovmono":
         global ovmono_model
         if ovmono_model is None:
             print("Loading OVMono3D model...")
-            # change directory to ovmono3d during model loading
             original_dir = os.getcwd()
             os.chdir(os.path.join(original_dir, 'ovmono3d'))
 
@@ -282,12 +280,12 @@ def reconstruct_pointclouds_for_chunks(chunks, masks):
         "save_dir": save_dir
     }
     
-    #do inference in sam3d-objects conda env
     input_json_path = "temp/sam3d_input.json"
     os.makedirs(os.path.dirname(input_json_path), exist_ok=True)
     with open(input_json_path, 'w') as f:
         json.dump(chunk_dict, f)
     
+    #do inference in sam3d-objects conda env
     env = os.environ.copy()
     env['PYTHONPATH'] = os.getcwd()
     
