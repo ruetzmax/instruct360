@@ -175,8 +175,11 @@ def render_scene(meshes):
     fig.show()
         
 def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
-    pcd = open3d.geometry.PointCloud()
-    pcd.points = open3d.utility.Vector3dVector(pointcloud)
+    if isinstance(pointcloud, open3d.geometry.PointCloud):
+        pcd = pointcloud
+    else:
+        pcd = open3d.geometry.PointCloud()
+        pcd.points = open3d.utility.Vector3dVector(pointcloud)
     pcd.paint_uniform_color(color)
     
     distances = pcd.compute_nearest_neighbor_distance()
