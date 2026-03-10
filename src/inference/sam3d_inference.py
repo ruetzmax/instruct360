@@ -29,6 +29,10 @@ ply_paths = []
 for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64, chunk_masks_base64)):
     chunk_image = base64_to_image(chunk_image_b64)
     chunk_mask = base64_to_image(chunk_mask_b64)
+
+    if len(chunk_mask.shape) > 2:
+        chunk_mask = chunk_mask[..., 0]
+
     save_path = os.path.join(save_dir, f"reconstructed_mesh_{idx}.ply")
     
     # # save image (numpy_array) in save dir

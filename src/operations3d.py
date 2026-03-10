@@ -105,9 +105,9 @@ def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
     
     # horizontal angle rotates around Y-axis
     rotation_yaw = np.array([
-        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
+        [np.cos(-angle_horizontal_rad), 0, np.sin(-angle_horizontal_rad)],
         [0, 1, 0],
-        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
+        [-np.sin(-angle_horizontal_rad), 0, np.cos(-angle_horizontal_rad)]
     ])
     
     # vertical angle rotates around X-axis
