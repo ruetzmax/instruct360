@@ -14,6 +14,10 @@ Reconstruct scene information from omnidirectional video input. Pipeline allows 
 OPTIONAL - for SLAM / camera postion tracking
 - Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
 
+Possible Errors:
+-  `ImportError: libtiff.so.5: cannot open shared object file...` ensure that libtiff is installed and downgrade PIL `pip install pillow==9.5.0"
+-  you may need to installed opencv / additional packages in the respective payload environments
+
 # Inference
 To infere 3D object bounding boxes from a video, run:
 `python scripts/track_objects_in_video.py --video_path vids/office.mp4 --classes "cupboard" "cup" "chair" --threshold_2d 0.25 --threshold_3d 0.3 --export_meshes True --output output/office_objects.pkl`
