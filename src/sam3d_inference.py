@@ -1,16 +1,15 @@
 import base64
-from io import BytesIO
 import os
 import sys, json
-from PIL import Image
 import numpy as np
+import cv2
 
 
 def base64_to_image(img_str):
     img_data = base64.b64decode(img_str)
-    buffered = BytesIO(img_data)
-    image_pil = Image.open(buffered)
-    image = np.array(image_pil)
+    nparr = np.frombuffer(img_data, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return image
 
 # Read input data from JSON file path

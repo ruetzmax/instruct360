@@ -1,5 +1,6 @@
 import json
 import subprocess
+import base64
 
 import open3d
 from src.operations2d import ImageChunk
@@ -8,6 +9,7 @@ import os
 import sys
 import numpy as np
 import torch
+import cv2
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
@@ -267,12 +269,24 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         meshes.append(mesh)
     return meshes
 
-def reconstruct_pointclouds_for_chunks(chunks, masks):
-    from src.util import image_to_base64
+def _image_to_base64(image):
+    if not isinstance(image, np.ndarray):
+        raise TypeError("Image must be a numpy array")
     
+    if image.dtype != np.uint8:
+        image = image.astype('uint8')
+    
+    success, encoded_image = cv2.imencode('.png', image)
+    if not success:
+        raise RuntimeError("Failed to encode image to PNG")
+    
+    img_str = base64.b64encode(encoded_image.tobytes()).decode('utf-8')
+    return img_str
+
+def reconstruct_pointclouds_for_chunks(chunks, masks):
     # convert chunk images and masks to base64
-    chunk_images_base64 = [image_to_base64(chunk.image) for chunk in chunks]
-    chunk_masks_base64 = [image_to_base64(mask) for mask in masks] 
+    chunk_images_base64 = [_image_to_base64(chunk.image) for chunk in chunks]
+    chunk_masks_base64 = [_image_to_base64(mask) for mask in masks] 
     save_dir = "temp/sam3d_output/"
     chunk_dict = {
         "chunk_images_base64": chunk_images_base64,

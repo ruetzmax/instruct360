@@ -5,8 +5,6 @@ import torch
 from torchvision.ops import box_convert
 import numpy as np
 import base64
-from io import BytesIO
-from PIL import Image
 import sys
 import os
 
@@ -189,16 +187,5 @@ def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
     mesh = open3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(pcd, open3d.utility.DoubleVector([radius, radius * 2]))
     
     return mesh
-
-def image_to_base64(image):
-    if isinstance(image, np.ndarray):
-        image_pil = Image.fromarray(image.astype('uint8'))
-    else:
-        image_pil = image
-    
-    buffered = BytesIO()
-    image_pil.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-    return img_str
 
     
