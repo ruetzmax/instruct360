@@ -7,7 +7,7 @@ import open3d as o3d
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.util import read_video_frames
-from src.tracking import reconstruct_pointclouds_for_class
+from src.tracking import reconstruct_meshes_for_class
 
 def reconstruct_pointclouds(video_path, classes, output_dir, input_pkl=None, output_pkl=None, frame_index=0):
     input_frames = read_video_frames(video_path)
@@ -15,7 +15,7 @@ def reconstruct_pointclouds(video_path, classes, output_dir, input_pkl=None, out
     
     all_pointclouds = []
     for class_name in classes:
-        class_pointclouds = reconstruct_pointclouds_for_class(frame, class_name)
+        class_pointclouds = reconstruct_meshes_for_class(frame, class_name)
         all_pointclouds.extend(class_pointclouds)
     
     # Combine all pointclouds into one

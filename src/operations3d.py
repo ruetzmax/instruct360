@@ -216,7 +216,7 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         meshes.append(mesh)
     return meshes
 
-def reconstruct_pointclouds_for_chunks(chunks, masks, sam3d_env="sam3d-objects"):
+def reconstruct_meshes_for_chunks(chunks, masks, sam3d_env="sam3d-objects"):
     runner = _get_sam3d_runner(sam3d_env)
     
     save_dir = "temp/sam3d_output/"
@@ -228,10 +228,10 @@ def reconstruct_pointclouds_for_chunks(chunks, masks, sam3d_env="sam3d-objects")
     
     output_data = runner.run(input_data)
     
-    pointclouds = []
-    for ply_path in output_data["ply_paths"]:
-        pointcloud = open3d.io.read_point_cloud(ply_path)
-        pointclouds.append(pointcloud)
+    meshes = []
+    for glb_path in output_data["glb_paths"]:
+        mesh = open3d.io.read_triangle_mesh(glb_path)
+        meshes.append(mesh)
     
-    return pointclouds
+    return meshes
         
