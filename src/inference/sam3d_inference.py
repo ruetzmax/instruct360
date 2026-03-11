@@ -3,14 +3,19 @@ import sys
 import numpy as np
 import torch
 from copy import deepcopy
-from pytorch3d.transforms import quaternion_to_matrix
+from pytorch3d.transforms import quaternion_to_matrix, Transform3d
 import trimesh
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
-from sam3d_objects.data.dataset.tdfy.transforms_3d import compose_transform
+
+def compose_transform(
+    scale: torch.Tensor, rotation: torch.Tensor, translation: torch.Tensor
+) -> Transform3d:
+    tfm = Transform3d(dtype=scale.dtype, device=scale.device)
+    return tfm.scale(scale).rotate(rotation).translate(translation)
 
 
 # https://github.com/facebookresearch/sam-3d-objects/issues/56
