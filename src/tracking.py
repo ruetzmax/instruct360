@@ -5,7 +5,7 @@ from matplotlib import image
 import msgpack
 
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
-from src.operations3d import adjust_pointclouds_by_chunk_rotation, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks
+from src.operations3d import adjust_meshes_by_chunk_rotation, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
@@ -138,6 +138,5 @@ def reconstruct_meshes_for_class(image, class_name):
     image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation="horizontal")
     masks = get_masks_from_image_chunks(image_chunks, prompt=class_name)
     meshes = reconstruct_meshes_for_chunks(image_chunks, masks)
-    #TODO
-    #adjusted_meshes = adjust_pointclouds_by_chunk_rotation(meshes, image_chunks)
-    return meshes
+    adjusted_meshes = adjust_meshes_by_chunk_rotation(meshes, image_chunks)
+    return adjusted_meshes

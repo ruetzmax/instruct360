@@ -9,6 +9,7 @@ import msgpack
 import open3d
 import numpy as np
 import cv2
+import trimesh
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -83,6 +84,12 @@ def _get_unique_index(mesh, class_name):
             return idx
     unique_meshes.append(mesh)
     return len(unique_meshes) - 1
+
+def _read_glb(glb_path):
+    scene = trimesh.load(glb_path)
+    geom = list(scene.geometry.values())
+    glb = open3d.geometry.TriangleMesh(vertices=open3d.utility.Vector3dVector(geom[0].vertices), triangles=open3d.utility.Vector3iVector(geom[0].faces))
+    return glb
 
 def do_visualization(object_pkl_path: str, output_video_path: str = None):
     with open(object_pkl_path, 'rb') as f:
@@ -194,13 +201,14 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                         mesh.paint_uniform_color(class_colors[class_name])
                 meshes_to_draw.append(mesh)
                 
-        # add reconstructed pointclouds as static geometry
-        pointcloud_path = frame_data.get('pointcloud_path', None)
-        if pointcloud_path and os.path.exists(pointcloud_path):
-            pointcloud = open3d.io.read_point_cloud(pointcloud_path)
+        # add reconstructed meshes as static geometry
+        reconstructed_meshes_path = frame_data.get('reconstructed_meshes_path', None)
+        if reconstructed_meshes_path and os.path.exists(reconstructed_meshes_path):
+            reconstructed_meshes = _read_glb(reconstructed_meshes_path)
+            print("added static mesh")
             if frame_camera_translation and frame_camera_rotation:
-                pointcloud = adjust_pose_by_camera_pose(pointcloud, frame_camera_translation, frame_camera_rotation)
-            static_geometries.append(pointcloud)
+                reconstructed_meshes = adjust_pose_by_camera_pose(reconstructed_meshes, frame_camera_translation, frame_camera_rotation)
+            static_geometries.append(reconstructed_meshes)
         
         # add character
         placeholder = get_character_placeholder()

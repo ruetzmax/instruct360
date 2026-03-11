@@ -98,12 +98,12 @@ def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     
     return rotated_centers, rotated_poses
 
-def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
-    rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
+def adjust_mesh_by_chunk_rotation(mesh, chunk: ImageChunk, scale=1.0):
+    rotated_mesh = open3d.geometry.TriangleMesh(mesh)
     
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
     
-    # horizontal angle rotates around Y-axis
+    # horizontal angle rotates around Y-axis (inverted)
     rotation_yaw = np.array([
         [np.cos(-angle_horizontal_rad), 0, np.sin(-angle_horizontal_rad)],
         [0, 1, 0],
@@ -119,16 +119,49 @@ def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
     
     rotation = rotation_pitch @ rotation_yaw
     
-    rotated_pointcloud.rotate(rotation, center=[0, 0, 0])
+    rotated_mesh.rotate(rotation, center=[0, 0, 0])
+    rotated_mesh.scale(scale, center=[0, 0, 0])
     
-    return rotated_pointcloud
+    return rotated_mesh
 
-def adjust_pointclouds_by_chunk_rotation(pointclouds, chunks):
-    adjusted_pointclouds = []
-    for pointcloud, chunk in zip(pointclouds, chunks):
-        adjusted_pointcloud = adjust_pointcloud_by_chunk_rotation(pointcloud, chunk)
-        adjusted_pointclouds.append(adjusted_pointcloud)
-    return adjusted_pointclouds
+def adjust_meshes_by_chunk_rotation(meshes, chunks, scale=1.0):
+    adjusted_meshes = []
+    for mesh, chunk in zip(meshes, chunks):
+        adjusted_mesh = adjust_mesh_by_chunk_rotation(mesh, chunk, scale=scale)
+        adjusted_meshes.append(adjusted_mesh)
+    return adjusted_meshes
+
+# def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
+#     rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
+    
+#     angle_horizontal_rad, angle_vertical_rad = chunk.angle
+    
+#     # horizontal angle rotates around Y-axis
+#     rotation_yaw = np.array([
+#         [np.cos(-angle_horizontal_rad), 0, np.sin(-angle_horizontal_rad)],
+#         [0, 1, 0],
+#         [-np.sin(-angle_horizontal_rad), 0, np.cos(-angle_horizontal_rad)]
+#     ])
+    
+#     # vertical angle rotates around X-axis
+#     rotation_pitch = np.array([
+#         [1, 0, 0],
+#         [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
+#         [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
+#     ])
+    
+#     rotation = rotation_pitch @ rotation_yaw
+    
+#     rotated_pointcloud.rotate(rotation, center=[0, 0, 0])
+    
+#     return rotated_pointcloud
+
+# def adjust_pointclouds_by_chunk_rotation(pointclouds, chunks):
+#     adjusted_pointclouds = []
+#     for pointcloud, chunk in zip(pointclouds, chunks):
+#         adjusted_pointcloud = adjust_pointcloud_by_chunk_rotation(pointcloud, chunk)
+#         adjusted_pointclouds.append(adjusted_pointcloud)
+#     return adjusted_pointclouds
 
 def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
     # create copy
