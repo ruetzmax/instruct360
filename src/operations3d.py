@@ -249,14 +249,20 @@ def get_box_meshes(boxes, color=(0, 0, 255)):
         meshes.append(mesh)
     return meshes
 
-def reconstruct_meshes_for_chunks(chunks, masks, sam3d_env="sam3d-objects"):
+def reconstruct_meshes_for_chunks(
+    chunks,
+    masks,
+    sam3d_env="sam3d-objects",
+    generate_texture=False,
+):
     runner = _get_sam3d_runner(sam3d_env)
     
     save_dir = "temp/sam3d_output/"
     input_data = {
         "chunk_images_base64": [image_to_base64(chunk.image) for chunk in chunks],
         "chunk_masks_base64": [image_to_base64(mask) for mask in masks],
-        "save_dir": save_dir
+        "save_dir": save_dir,
+        "generate_texture": generate_texture,
     }
     
     output_data = runner.run(input_data)

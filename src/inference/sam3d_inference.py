@@ -5,6 +5,8 @@ import torch
 from copy import deepcopy
 from pytorch3d.transforms import quaternion_to_matrix, Transform3d
 import trimesh
+from omegaconf import OmegaConf
+from hydra.utils import instantiate
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,6 +18,46 @@ def compose_transform(
 ) -> Transform3d:
     tfm = Transform3d(dtype=scale.dtype, device=scale.device)
     return tfm.scale(scale).rotate(rotation).translate(translation)
+
+
+class Sam3DInference:
+    def __init__(self, config_file: str, compile: bool = False):
+        config = OmegaConf.load(config_file)
+        config.rendering_engine = "pytorch3d"
+        config.compile_model = compile
+        config.workspace_dir = os.path.dirname(config_file)
+        self._pipeline = instantiate(config)
+
+    @staticmethod
+    def merge_mask_to_rgba(image, mask):
+        mask = mask.astype(np.uint8) * 255
+        mask = mask[..., None]
+        return np.concatenate([image[..., :3], mask], axis=-1)
+
+    def __call__(
+        self,
+        image,
+        mask,
+        seed=42,
+        pointmap=None,
+        with_mesh_postprocess=False,
+        with_texture_baking=False,
+        use_vertex_color=True,
+    ):
+        image = self.merge_mask_to_rgba(image, mask)
+        return self._pipeline.run(
+            image,
+            None,
+            seed,
+            stage1_only=False,
+            with_mesh_postprocess=with_mesh_postprocess,
+            with_texture_baking=with_texture_baking,
+            with_layout_postprocess=False,
+            use_vertex_color=use_vertex_color,
+            stage1_inference_steps=None,
+            pointmap=pointmap,
+        )
+
 
 
 # https://github.com/facebookresearch/sam-3d-objects/issues/56
@@ -56,13 +98,19 @@ def make_scene_untextured_mesh(*outputs, in_place=False):
 input_data = load_inference_input()
 
 workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(os.path.join(workspace_root, "sam-3d-objects", "notebook"))
-from inference import Inference
-sam3d_model = Inference(os.path.join(workspace_root, "sam-3d-objects/checkpoints/hf/pipeline.yaml"), compile=False)
+sam3d_root = os.path.join(workspace_root, "sam-3d-objects")
+sys.path.append(sam3d_root)
+os.environ.setdefault("CUDA_HOME", os.environ.get("CONDA_PREFIX", ""))
+os.environ.setdefault("LIDRA_SKIP_INIT", "true")
+sam3d_model = Sam3DInference(
+    os.path.join(sam3d_root, "checkpoints/hf/pipeline.yaml"),
+    compile=False,
+)
 
 chunk_images_base64 = input_data["chunk_images_base64"]
 chunk_masks_base64 = input_data["chunk_masks_base64"]
 save_dir = input_data["save_dir"]
+generate_texture = input_data.get("generate_texture", False)
 
 #clear save dir
 if not os.path.exists(save_dir):
@@ -87,7 +135,14 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
     # chunk_image_pil = Image.fromarray(chunk_image)
     # chunk_image_pil.save(os.path.join(save_dir, f"chunk_image_{idx}.png"))
     
-    reconstruction_output = sam3d_model(chunk_image, chunk_mask, seed=42)
+    reconstruction_output = sam3d_model(
+        chunk_image,
+        chunk_mask,
+        seed=42,
+        with_mesh_postprocess=generate_texture,
+        with_texture_baking=generate_texture,
+        use_vertex_color=not generate_texture,
+    )
     posed_glb = make_scene_untextured_mesh(reconstruction_output)
     posed_glb.export(save_path)
     # reconstruction_output["gs"].save_ply(save_path)

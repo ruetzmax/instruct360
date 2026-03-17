@@ -9,13 +9,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.util import read_video_frames
 from src.tracking import reconstruct_meshes_for_class
 
-def reconstruct_meshes(video_path, classes, output_dir, input_pkl=None, output_pkl=None, frame_index=0):
+def reconstruct_meshes(
+    video_path,
+    classes,
+    output_dir,
+    input_pkl=None,
+    output_pkl=None,
+    frame_index=0,
+    generate_texture=False,
+):
     input_frames = read_video_frames(video_path)
     frame = input_frames[frame_index]
     
     all_meshes = []
     for class_name in classes:
-        class_meshes = reconstruct_meshes_for_class(frame, class_name)
+        class_meshes = reconstruct_meshes_for_class(
+            frame,
+            class_name,
+            generate_texture=generate_texture,
+            use_gpu=True,
+        )
         all_meshes.extend(class_meshes)
     
     # Combine all meshes into one
@@ -83,6 +96,13 @@ def main():
         default=0,
         help="Index of the frame to process (default: 0)"
     )
+    parser.add_argument(
+        "--generate-texture",
+        "--textured-mesh",
+        dest="generate_texture",
+        action="store_true",
+        help="Enable texture baking for SAM3D mesh reconstruction"
+    )
     
     args = parser.parse_args()
         
@@ -92,7 +112,8 @@ def main():
         output_dir=args.output_dir,
         frame_index=args.frame_index,
         input_pkl=args.input_pkl,
-        output_pkl=args.output_pkl
+        output_pkl=args.output_pkl,
+        generate_texture=args.generate_texture,
     )
 
 if __name__ == "__main__":

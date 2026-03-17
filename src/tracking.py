@@ -9,8 +9,21 @@ from src.operations3d import adjust_meshes_by_chunk_rotation, get_3d_bounding_bo
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
-def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold_3d=0.3, orientation='vertical', video_format='equirectangular'):
-    bounding_boxes_2d = get_2d_bounding_boxes(image, class_name, threshold=threshold_2d)
+def get_bounding_boxes_for_class(
+    image,
+    class_name,
+    threshold_2d=0.25,
+    threshold_3d=0.3,
+    orientation='vertical',
+    video_format='equirectangular',
+    use_gpu=False,
+):
+    bounding_boxes_2d = get_2d_bounding_boxes(
+        image,
+        class_name,
+        threshold=threshold_2d,
+        use_gpu=use_gpu,
+    )
     
     
     if video_format == 'equirectangular':
@@ -31,7 +44,19 @@ def get_bounding_boxes_for_class(image, class_name, threshold_2d=0.25, threshold
         
     return bounding_boxes_2d, all_3d_bb_centers, all_3d_bb_dimensions, all_3d_bb_poses
 
-def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_meshes=False, colors=None, video_path=None, left_video_path=None, right_video_path=None, orientation='vertical', video_format='equirectangular'):
+def track_objects_in_video(
+    classes,
+    threshold_2d=0.25,
+    threshold_3d=0.3,
+    export_meshes=False,
+    colors=None,
+    video_path=None,
+    left_video_path=None,
+    right_video_path=None,
+    orientation='vertical',
+    video_format='equirectangular',
+    use_gpu=False,
+):
     
     if colors and len(colors) != len(classes):
         raise ValueError("Length of colors must match length of classes.")
@@ -49,7 +74,13 @@ def track_objects_in_video(classes, threshold_2d=0.25, threshold_3d=0.3, export_
         
         for class_idx, class_name in enumerate(classes):
             bbs = get_bounding_boxes_for_class(
-                frame, class_name, threshold_2d=threshold_2d, threshold_3d=threshold_3d, orientation=orientation, video_format=video_format
+                frame,
+                class_name,
+                threshold_2d=threshold_2d,
+                threshold_3d=threshold_3d,
+                orientation=orientation,
+                video_format=video_format,
+                use_gpu=use_gpu,
             )
             
             bb2ds, bb_centers, bb_dimensions, bb_poses = bbs
@@ -133,10 +164,27 @@ def track_camera_poses(video_path, video_format='equirectangular'):
             camera_poses.append(frame_dict)
     return camera_poses
         
-def reconstruct_meshes_for_class(image, class_name):
-    bounding_boxes_2d = get_2d_bounding_boxes(image, class_name)
+def reconstruct_meshes_for_class(
+    image,
+    class_name,
+    generate_texture=False,
+    use_gpu=False,
+):
+    bounding_boxes_2d = get_2d_bounding_boxes(
+        image,
+        class_name,
+        use_gpu=use_gpu,
+    )
     image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation="horizontal")
-    masks = get_masks_from_image_chunks(image_chunks, prompt=class_name)
-    meshes = reconstruct_meshes_for_chunks(image_chunks, masks)
+    masks = get_masks_from_image_chunks(
+        image_chunks,
+        prompt=class_name,
+        use_gpu=use_gpu,
+    )
+    meshes = reconstruct_meshes_for_chunks(
+        image_chunks,
+        masks,
+        generate_texture=generate_texture,
+    )
     adjusted_meshes = adjust_meshes_by_chunk_rotation(meshes, image_chunks)
     return adjusted_meshes
