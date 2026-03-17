@@ -8,6 +8,8 @@ import base64
 import sys
 import os
 
+import trimesh
+
 from src.operations2d import ImageChunk, insv_to_equirect    
 
 from open3d.visualization import draw_geometries
@@ -190,4 +192,61 @@ def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
     
     return mesh
 
+def trimesh_to_open3d(mesh):
+    if isinstance(mesh, trimesh.Scene):
+        dumped = mesh.dump()
+        sub_meshes = [g for g in dumped if isinstance(g, trimesh.Trimesh)]
+        if not sub_meshes:
+            raise ValueError("GLB scene does not contain any mesh geometry")
+        textured = [
+            g for g in sub_meshes
+            if getattr(getattr(g.visual, "material", None), "image", None) is not None
+            or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
+        ]
+        mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+    elif not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError(f"Unsupported trimesh type: {type(mesh)}")
+
+    # convert into open3d space
+    vertices = np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, -1]
+    faces = np.asarray(mesh.faces)[:, [0, 2, 1]]
+
+    o3d_mesh = open3d.geometry.TriangleMesh()
+    o3d_mesh.vertices = open3d.utility.Vector3dVector(vertices)
+    o3d_mesh.triangles = open3d.utility.Vector3iVector(faces)
+
+    material = getattr(mesh.visual, "material", None)
+    texture_image = None
+    if material is not None:
+        texture_image = getattr(material, "image", None)
+        if texture_image is None:
+            texture_image = getattr(material, "baseColorTexture", None)
+    uv = getattr(mesh.visual, "uv", None)
+
+    if texture_image is not None and uv is not None and len(uv) == len(mesh.vertices):
+        uv = np.asarray(uv, dtype=np.float64)
+        uv[:, 1] = 1.0 - uv[:, 1]
+        triangle_uvs = uv[faces].reshape(-1, 2)
+        o3d_mesh.triangle_uvs = open3d.utility.Vector2dVector(triangle_uvs)
+
+        texture_np = np.asarray(texture_image)
+        if texture_np.ndim == 2:
+            texture_np = np.stack([texture_np, texture_np, texture_np], axis=-1)
+        if texture_np.dtype != np.uint8:
+            texture_np = np.clip(texture_np, 0, 255).astype(np.uint8)
+
+        o3d_mesh.textures = [open3d.geometry.Image(texture_np)]
+        o3d_mesh.triangle_material_ids = open3d.utility.IntVector(
+            np.zeros(len(mesh.faces), dtype=np.int32)
+        )
+
+    vertex_colors = getattr(mesh.visual, "vertex_colors", None)
+    if not o3d_mesh.has_textures() and vertex_colors is not None and len(vertex_colors) == len(mesh.vertices):
+        vertex_colors = np.asarray(vertex_colors)[:, :3].astype(np.float64)
+        if vertex_colors.max() > 1.0:
+            vertex_colors = vertex_colors / 255.0
+        o3d_mesh.vertex_colors = open3d.utility.Vector3dVector(vertex_colors)
+
+    o3d_mesh.compute_vertex_normals()
+    return o3d_mesh
     

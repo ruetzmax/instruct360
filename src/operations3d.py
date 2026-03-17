@@ -2,6 +2,7 @@ import os
 import numpy as np
 
 import open3d
+import trimesh
 from src.operations2d import ImageChunk
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
@@ -99,28 +100,31 @@ def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     return rotated_centers, rotated_poses
 
 def adjust_mesh_by_chunk_rotation(mesh, chunk: ImageChunk, scale=1.0):
-    rotated_mesh = open3d.geometry.TriangleMesh(mesh)
+    if not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError(f"Expected trimesh.Trimesh, got {type(mesh)}")
+    
+    rotated_mesh = mesh.copy()
     
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
     
-    # horizontal angle rotates around Y-axis (inverted)
+    # horizontal angle rotates around Y-axis
     rotation_yaw = np.array([
-        [np.cos(-angle_horizontal_rad), 0, np.sin(-angle_horizontal_rad)],
+        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
         [0, 1, 0],
-        [-np.sin(-angle_horizontal_rad), 0, np.cos(-angle_horizontal_rad)]
+        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
     ])
     
     # vertical angle rotates around X-axis
     rotation_pitch = np.array([
         [1, 0, 0],
-        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
-        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
+        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
+        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
     ])
     
     rotation = rotation_pitch @ rotation_yaw
     
-    rotated_mesh.rotate(rotation, center=[0, 0, 0])
-    rotated_mesh.scale(scale, center=[0, 0, 0])
+    rotated_mesh.apply_transform(np.vstack([np.hstack([rotation, [[0], [0], [0]]]), [0, 0, 0, 1]]))
+    rotated_mesh.apply_scale(scale)
     
     return rotated_mesh
 
@@ -269,8 +273,22 @@ def reconstruct_meshes_for_chunks(
     
     meshes = []
     for glb_path in output_data["glb_paths"]:
-        mesh = open3d.io.read_triangle_mesh(glb_path)
-        meshes.append(mesh)
+        trimesh_mesh = trimesh.load(glb_path)
+        # Extract the first textured mesh or the largest if none have textures
+        if isinstance(trimesh_mesh, trimesh.Scene):
+            sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
+            if not sub_meshes:
+                raise ValueError("GLB scene does not contain any mesh geometry")
+            textured = [
+                g for g in sub_meshes
+                if getattr(getattr(g.visual, "material", None), "image", None) is not None
+                or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
+            ]
+            trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+        elif not isinstance(trimesh_mesh, trimesh.Trimesh):
+            raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(trimesh_mesh)}")
+        
+        meshes.append(trimesh_mesh)
     
     return meshes
         

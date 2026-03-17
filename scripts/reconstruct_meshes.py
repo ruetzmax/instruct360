@@ -2,7 +2,7 @@ from pathlib import Path
 import pickle
 import sys
 import argparse
-import open3d as o3d
+import trimesh
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -36,13 +36,11 @@ def reconstruct_meshes(
         print("No meshes found to combine")
         return
     
-    combined_mesh = all_meshes[0]
-    for mesh in all_meshes[1:]:
-        combined_mesh += mesh
+    combined_mesh = trimesh.util.concatenate(all_meshes)
     
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_file = f"{output_dir}/{frame_index}.ply"
-    o3d.io.write_triangle_mesh(output_file, combined_mesh)
+    output_file = f"{output_dir}/{frame_index}.glb"
+    combined_mesh.export(output_file)
     print(f"Saved combined mesh to {output_file}")
     
     if input_pkl:

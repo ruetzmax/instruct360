@@ -14,7 +14,7 @@ import trimesh
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes
-from src.util import get_character_placeholder
+from src.util import get_character_placeholder, trimesh_to_open3d
 
 FPS = 24
 
@@ -85,10 +85,22 @@ def _get_unique_index(mesh, class_name):
     unique_meshes.append(mesh)
     return len(unique_meshes) - 1
 
+
 def _read_glb(glb_path):
-    scene = trimesh.load(glb_path)
-    geom = list(scene.geometry.values())
-    glb = open3d.geometry.TriangleMesh(vertices=open3d.utility.Vector3dVector(geom[0].vertices), triangles=open3d.utility.Vector3iVector(geom[0].faces))
+    trimesh_mesh = trimesh.load(glb_path)
+    # Handle scene: extract first textured mesh or largest
+    if isinstance(trimesh_mesh, trimesh.Scene):
+        sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
+        if not sub_meshes:
+            raise ValueError("GLB scene does not contain any mesh geometry")
+        textured = [
+            g for g in sub_meshes
+            if getattr(getattr(g.visual, "material", None), "image", None) is not None
+            or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
+        ]
+        trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+    
+    glb = trimesh_to_open3d(trimesh_mesh)
     return glb
 
 def do_visualization(object_pkl_path: str, output_video_path: str = None):
