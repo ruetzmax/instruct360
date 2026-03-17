@@ -84,7 +84,7 @@ def get_2d_bounding_boxes(
     threshold=0.35,
     use_gpu=False,
     dino_env="grounding_dino",
-    sam3_env="sam3d-objects",
+    sam3_env="sam3",
 ):
     if use_gpu:
         runner = _get_sam3_runner(sam3_env)
@@ -156,7 +156,7 @@ def get_masks_from_image_chunks(
     prompt,
     use_gpu=False,
     ovseg_env="ovseg",
-    sam3_env="sam3d-objects",
+    sam3_env="sam3",
 ):
     runner = _get_sam3_runner(sam3_env) if use_gpu else _get_ovseg_runner(ovseg_env)
     

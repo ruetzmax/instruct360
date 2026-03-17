@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+from PIL import Image
 
 from inference_utils import (
     base64_to_image,
@@ -45,9 +46,33 @@ def _mask_to_rgba_b64(image, mask):
     return image_to_base64(rgba)
 
 
+def _xyxy_pixels_to_normalized_cxcywh(boxes_xyxy, width, height):
+    boxes = boxes_xyxy.astype(np.float32).copy()
+    boxes[:, 0] = np.clip(boxes[:, 0], 0, width)
+    boxes[:, 2] = np.clip(boxes[:, 2], 0, width)
+    boxes[:, 1] = np.clip(boxes[:, 1], 0, height)
+    boxes[:, 3] = np.clip(boxes[:, 3], 0, height)
+
+    x1 = np.minimum(boxes[:, 0], boxes[:, 2])
+    y1 = np.minimum(boxes[:, 1], boxes[:, 3])
+    x2 = np.maximum(boxes[:, 0], boxes[:, 2])
+    y2 = np.maximum(boxes[:, 1], boxes[:, 3])
+
+    cx = ((x1 + x2) * 0.5) / width
+    cy = ((y1 + y2) * 0.5) / height
+    w = (x2 - x1) / width
+    h = (y2 - y1) / height
+
+    return np.stack([cx, cy, w, h], axis=1)
+
 for idx, input_image_b64 in enumerate(chunk_images_b64):
     chunk_image = base64_to_image(input_image_b64)
-    inference_state = processor.set_image(chunk_image)
+    if chunk_image.ndim == 3 and chunk_image.shape[2] == 4:
+        chunk_image = chunk_image[..., :3]
+    chunk_image_pil = chunk_image.astype(np.uint8)
+    chunk_image_pil = Image.fromarray(chunk_image_pil)
+    image_h, image_w = chunk_image.shape[:2]
+    inference_state = processor.set_image(chunk_image_pil)
     output = processor.set_text_prompt(state=inference_state, prompt=prompt)
 
     masks = _to_numpy(output.get("masks"))
@@ -88,7 +113,13 @@ for idx, input_image_b64 in enumerate(chunk_images_b64):
     best_idx = int(filtered_indices[np.argmax(filtered_scores)])
 
     best_mask = np.asarray(masks[best_idx]).squeeze()
-    boxes_list = boxes_array[filtered_indices].tolist()
+    filtered_boxes_xyxy = boxes_array[filtered_indices]
+    filtered_boxes_cxcywh = _xyxy_pixels_to_normalized_cxcywh(
+        filtered_boxes_xyxy,
+        image_w,
+        image_h,
+    )
+    boxes_list = filtered_boxes_cxcywh.tolist()
     scores_list = [float(score) for score in filtered_scores.tolist()]
 
     all_masks_b64.append(_mask_to_rgba_b64(chunk_image, best_mask))
