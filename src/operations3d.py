@@ -253,7 +253,7 @@ def reconstruct_meshes_for_chunks(
     chunks,
     masks,
     sam3d_env="sam3d-objects",
-    generate_texture=False,
+    generate_texture=True,
 ):
     runner = _get_sam3d_runner(sam3d_env)
     

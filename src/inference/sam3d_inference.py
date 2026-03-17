@@ -7,11 +7,19 @@ from pytorch3d.transforms import quaternion_to_matrix, Transform3d
 import trimesh
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
+import importlib.util
+
+def has_nvdiffrast() -> bool:
+    return importlib.util.find_spec("nvdiffrast") is not None
+
+print("nvdiffrast: ", has_nvdiffrast())
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
+
+
 
 def compose_transform(
     scale: torch.Tensor, rotation: torch.Tensor, translation: torch.Tensor
@@ -19,11 +27,69 @@ def compose_transform(
     tfm = Transform3d(dtype=scale.dtype, device=scale.device)
     return tfm.scale(scale).rotate(rotation).translate(translation)
 
+def has_inria_rasterizer() -> bool:
+    return importlib.util.find_spec("diff_gaussian_rasterization") is not None
+
+
+def apply_sam3d_runtime_patches() -> None:
+    from sam3d_objects.model.backbone.tdfy_dit.renderers import gaussian_render
+    from sam3d_objects.model.backbone.tdfy_dit.utils import render_utils
+    from sam3d_objects.model.backbone.tdfy_dit.utils import postprocessing_utils
+
+    inria_available = has_inria_rasterizer()
+
+    original_render = gaussian_render.render
+
+    def render_with_backend_fallback(
+        viewpoint_camera,
+        pc,
+        pipe,
+        bg_color,
+        scaling_modifier=1.0,
+        override_color=None,
+        backend="inria",
+    ):
+        effective_backend = backend
+        if backend == "inria" and not inria_available:
+            effective_backend = "gsplat"
+        return original_render(
+            viewpoint_camera,
+            pc,
+            pipe,
+            bg_color,
+            scaling_modifier=scaling_modifier,
+            override_color=override_color,
+            backend=effective_backend,
+        )
+
+    gaussian_render.render = render_with_backend_fallback
+
+    def render_multiview_with_backend_fallback(sample, resolution=512, nviews=30):
+        backend = "inria" if inria_available else "gsplat"
+        radius = 2
+        fov = 40
+        cameras = [render_utils.sphere_hammersley_sequence(i, nviews) for i in range(nviews)]
+        yaws = [camera[0] for camera in cameras]
+        pitches = [camera[1] for camera in cameras]
+        extrinsics, intrinsics = render_utils.yaw_pitch_r_fov_to_extrinsics_intrinsics(
+            yaws, pitches, radius, fov
+        )
+        rendered = render_utils.render_frames(
+            sample,
+            extrinsics,
+            intrinsics,
+            {"resolution": resolution, "bg_color": (0, 0, 0), "backend": backend},
+        )
+        return rendered["color"], extrinsics, intrinsics
+
+    render_utils.render_multiview = render_multiview_with_backend_fallback
+    postprocessing_utils.render_multiview = render_multiview_with_backend_fallback
+
 
 class Sam3DInference:
     def __init__(self, config_file: str, compile: bool = False):
         config = OmegaConf.load(config_file)
-        config.rendering_engine = "pytorch3d"
+        config.rendering_engine = "nvdiffrast" # "pytorch3d"
         config.compile_model = compile
         config.workspace_dir = os.path.dirname(config_file)
         self._pipeline = instantiate(config)
@@ -102,6 +168,7 @@ sam3d_root = os.path.join(workspace_root, "sam-3d-objects")
 sys.path.append(sam3d_root)
 os.environ.setdefault("CUDA_HOME", os.environ.get("CONDA_PREFIX", ""))
 os.environ.setdefault("LIDRA_SKIP_INIT", "true")
+apply_sam3d_runtime_patches()
 sam3d_model = Sam3DInference(
     os.path.join(sam3d_root, "checkpoints/hf/pipeline.yaml"),
     compile=False,
@@ -111,6 +178,9 @@ chunk_images_base64 = input_data["chunk_images_base64"]
 chunk_masks_base64 = input_data["chunk_masks_base64"]
 save_dir = input_data["save_dir"]
 generate_texture = input_data.get("generate_texture", False)
+
+if generate_texture and not has_nvdiffrast():
+    raise RuntimeError("nvdiffrast required for texture generation")
 
 #clear save dir
 if not os.path.exists(save_dir):
@@ -125,6 +195,10 @@ glb_paths = []
 for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64, chunk_masks_base64)):
     chunk_image = base64_to_image(chunk_image_b64)
     chunk_mask = base64_to_image(chunk_mask_b64)
+
+    chunk_mask = chunk_mask > 0  # Convert to boolean
+    if len(chunk_mask.shape) > 2:
+        chunk_mask = chunk_mask[..., -1]
 
     if len(chunk_mask.shape) > 2:
         chunk_mask = chunk_mask[..., 0]
