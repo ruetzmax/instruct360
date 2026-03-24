@@ -214,7 +214,16 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                 meshes_to_draw.append(mesh)
                 
         # add reconstructed meshes as static geometry
-        reconstructed_meshes_data = frame_data.get('reconstructed_meshes', {})
+        reconstructed_meshes_data = {}
+        frame_classes_for_meshes = frame_data.get('classes', [])
+        for class_dict in frame_classes_for_meshes:
+            if not isinstance(class_dict, dict):
+                continue
+            class_name = class_dict.get('class_name')
+            class_meshes = class_dict.get('reconstructed_meshes', [])
+            if class_name and class_meshes:
+                reconstructed_meshes_data[class_name] = class_meshes
+
         if reconstructed_meshes_data:
             for class_name, meshes_info_list in reconstructed_meshes_data.items():
                 for mesh_info in meshes_info_list:

@@ -168,7 +168,7 @@ def reconstruct_meshes_for_class(
     image,
     class_name,
     generate_texture=False,
-    use_gpu=False,
+    use_gpu=True,
 ):
     bounding_boxes_2d = get_2d_bounding_boxes(
         image,

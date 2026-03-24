@@ -21,6 +21,11 @@ def reconstruct_meshes(
 ):
     input_frames = read_video_frames(video_path)
     frame = input_frames[frame_index]
+
+    frames_data = None
+    if input_pkl:
+        with open(input_pkl, 'rb') as f:
+            frames_data = pickle.load(f)
     
     reconstructed_meshes_by_class = {}
     
@@ -37,10 +42,13 @@ def reconstruct_meshes(
         
         class_dir = f"{output_dir}/{class_name}"
         Path(class_dir).mkdir(parents=True, exist_ok=True)
+
+        for existing_file in Path(class_dir).glob("unposed_*.glb"):
+            existing_file.unlink()
         
         class_meshes_data = []
         
-        for idx, (unposed_mesh, adjusted_mesh, rotation, translation) in enumerate(zip(
+        for idx, (unposed_mesh, _, rotation, translation) in enumerate(zip(
             unposed_meshes, adjusted_meshes, adjusted_rotations, adjusted_translations
         )):
             # Save unposed mesh
@@ -65,11 +73,24 @@ def reconstruct_meshes(
     if input_pkl:
         if not output_pkl:
             output_pkl = input_pkl
-        
-        with open(input_pkl, 'rb') as f:
-            frames_data = pickle.load(f)
-        
-        frames_data[frame_index]['reconstructed_meshes'] = reconstructed_meshes_by_class
+
+        frame_data = frames_data[frame_index]
+        frame_classes = frame_data.get('classes', [])
+        classes_by_name = {
+            class_entry.get('class_name'): class_entry
+            for class_entry in frame_classes
+            if isinstance(class_entry, dict) and class_entry.get('class_name')
+        }
+
+        for class_name, class_meshes in reconstructed_meshes_by_class.items():
+            class_entry = classes_by_name.get(class_name)
+            if class_entry is None:
+                class_entry = {'class_name': class_name}
+                frame_classes.append(class_entry)
+
+            class_entry['reconstructed_meshes'] = class_meshes
+
+        frame_data['classes'] = frame_classes
         
         with open(output_pkl, 'wb') as f:
             pickle.dump(frames_data, f)
