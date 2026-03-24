@@ -66,6 +66,15 @@ class ImageChunk:
         return cls(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov)
 
 
+def find_similar_image_chunk(image_chunk: ImageChunk, candidate_chunks, threshold: float = 0.05):
+    target_center = np.asarray(image_chunk.center, dtype=np.float32)
+    for candidate_chunk in candidate_chunks:
+        candidate_center = np.asarray(candidate_chunk.center, dtype=np.float32)
+        if np.linalg.norm(candidate_center - target_center) < threshold:
+            return candidate_chunk
+    return None
+
+
 _dino_runner = None
 _ovseg_runner = None
 _sam3_runner = None
