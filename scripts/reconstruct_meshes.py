@@ -142,6 +142,7 @@ def main():
         "--textured-mesh",
         dest="generate_texture",
         action="store_true",
+        default=True,
         help="Enable texture baking for SAM3D mesh reconstruction"
     )
     
