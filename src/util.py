@@ -17,6 +17,34 @@ from open3d.visualization import draw_geometries
 import plotly.graph_objects as go
 
 
+def normalize_rotation_matrix(rotation_matrix):
+    rotation = np.asarray(rotation_matrix, dtype=np.float32)
+    if rotation.shape == (3, 3):
+        return rotation
+
+    flat = rotation.reshape(-1)
+    if flat.size != 9:
+        raise ValueError(f"Expected rotation matrix with 9 values, got shape {rotation.shape}")
+
+    return flat.reshape(3, 3)
+
+
+def normalize_translation_vector(translation_vector):
+    translation = np.asarray(translation_vector, dtype=np.float32)
+    if translation.shape == (3,):
+        return translation
+    if translation.shape == (1, 3):
+        return translation[0]
+    if translation.shape == (3, 1):
+        return translation[:, 0]
+
+    flat = translation.reshape(-1)
+    if flat.size != 3:
+        raise ValueError(f"Expected translation vector with 3 values, got shape {translation.shape}")
+
+    return flat
+
+
 def read_video_frames(video_path=None, left_video_path=None, right_video_path=None):
     if not video_path:
         if not left_video_path or not right_video_path:

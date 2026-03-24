@@ -244,7 +244,17 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
         rotation_matrices.append(R_l2c_yup.tolist())
         
         # Extract translation and convert to Y-up
-        translation = reconstruction_output["translation"].cpu().numpy()
+        translation = reconstruction_output["translation"].detach().cpu().numpy().astype(np.float32)
+        if translation.shape == (1, 3):
+            translation = translation[0]
+        elif translation.shape == (3, 1):
+            translation = translation[:, 0]
+        else:
+            translation = translation.reshape(-1)
+
+        if translation.size != 3:
+            raise ValueError(f"Unexpected translation shape: {reconstruction_output['translation'].shape}")
+
         # Reorder coordinates from Z-up [x, z, -y] to Y-up [x, y, z]
         translation_yup = np.array([translation[0], -translation[2], translation[1]], dtype=np.float32)
         translation_vectors.append(translation_yup.tolist())

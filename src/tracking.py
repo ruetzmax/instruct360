@@ -5,7 +5,7 @@ from matplotlib import image
 import msgpack
 
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
-from src.operations3d import adjust_meshes_by_chunk_rotation, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms
+from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 

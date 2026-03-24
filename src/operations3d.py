@@ -4,6 +4,7 @@ import numpy as np
 import open3d
 import trimesh
 from src.operations2d import ImageChunk
+from src.util import normalize_rotation_matrix, normalize_translation_vector
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 
@@ -134,49 +135,16 @@ def adjust_transforms_by_chunk_rotation(rotation_matrices, translation_vectors, 
     adjusted_translations = []
     
     for rotation_matrix in rotation_matrices:
-        adjusted_rotation = chunk_rotation @ rotation_matrix
+        normalized_rotation = normalize_rotation_matrix(rotation_matrix)
+        adjusted_rotation = chunk_rotation @ normalized_rotation
         adjusted_rotations.append(adjusted_rotation)
     
     for translation_vector in translation_vectors:
-        adjusted_translation = chunk_rotation @ translation_vector
+        normalized_translation = normalize_translation_vector(translation_vector)
+        adjusted_translation = chunk_rotation @ normalized_translation
         adjusted_translations.append(adjusted_translation)
     
     return adjusted_rotations, adjusted_translations
-
-    if not isinstance(mesh, trimesh.Trimesh):
-        raise TypeError(f"Expected trimesh.Trimesh, got {type(mesh)}")
-    
-    rotated_mesh = mesh.copy()
-    
-    angle_horizontal_rad, angle_vertical_rad = chunk.angle
-    
-    # horizontal angle rotates around Y-axis
-    rotation_yaw = np.array([
-        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
-        [0, 1, 0],
-        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
-    ])
-    
-    # vertical angle rotates around X-axis
-    rotation_pitch = np.array([
-        [1, 0, 0],
-        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
-        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
-    ])
-    
-    rotation = rotation_pitch @ rotation_yaw
-    
-    rotated_mesh.apply_transform(np.vstack([np.hstack([rotation, [[0], [0], [0]]]), [0, 0, 0, 1]]))
-    rotated_mesh.apply_scale(scale)
-    
-    return rotated_mesh
-
-def adjust_meshes_by_chunk_rotation(meshes, chunks, scale=1.0):
-    adjusted_meshes = []
-    for mesh, chunk in zip(meshes, chunks):
-        adjusted_mesh = adjust_mesh_by_chunk_rotation(mesh, chunk, scale=scale)
-        adjusted_meshes.append(adjusted_mesh)
-    return adjusted_meshes
 
 # def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
 #     rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
@@ -377,13 +345,16 @@ def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector):
     """
     if not isinstance(unposed_mesh, trimesh.Trimesh):
         raise TypeError(f"Expected trimesh.Trimesh, got {type(unposed_mesh)}")
+
+    normalized_rotation = normalize_rotation_matrix(rotation_matrix)
+    normalized_translation = normalize_translation_vector(translation_vector)
     
     transformed_mesh = unposed_mesh.copy()
     
     # Create 4x4 transformation matrix
-    transform_4x4 = np.eye(4)
-    transform_4x4[:3, :3] = rotation_matrix
-    transform_4x4[:3, 3] = translation_vector
+    transform_4x4 = np.eye(4, dtype=np.float32)
+    transform_4x4[:3, :3] = normalized_rotation
+    transform_4x4[:3, 3] = normalized_translation
     
     # Apply transformation to mesh
     transformed_mesh.apply_transform(transform_4x4)
