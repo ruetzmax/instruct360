@@ -151,61 +151,6 @@ def adjust_transforms_by_chunk_rotation(
     return adjusted_rotations, adjusted_translations
 
 
-def _rotation_matrix_from_sam3d_quaternion(rotation_quaternion):
-    rotation = np.asarray(rotation_quaternion, dtype=np.float32).reshape(-1)
-    if rotation.size != 4:
-        raise ValueError(f"Expected rotation quaternion with 4 values, got shape {np.asarray(rotation_quaternion).shape}")
-    return open3d.geometry.get_rotation_matrix_from_quaternion(rotation.tolist())
-
-
-def adjust_sam3d_transform(scale_vector, rotation_quaternion, translation_vector):
-    """
-    Frontend hook for SAM3D transform adjustment.
-    Currently identity: returns raw SAM3D transform values converted to
-    frontend-friendly representation (rotation matrix + vectors).
-    """
-    scale = normalize_scale_vector(scale_vector)
-    rotation_matrix = _rotation_matrix_from_sam3d_quaternion(rotation_quaternion)
-    translation = normalize_translation_vector(translation_vector)
-
-    adjustment = np.eye(4, dtype=np.float32)
-    adjusted_rotation = adjustment[:3, :3] @ rotation_matrix
-    adjusted_translation = adjustment[:3, :3] @ translation + adjustment[:3, 3]
-
-    return scale, adjusted_rotation, adjusted_translation
-
-# def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
-#     rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
-    
-#     angle_horizontal_rad, angle_vertical_rad = chunk.angle
-    
-#     # horizontal angle rotates around Y-axis
-#     rotation_yaw = np.array([
-#         [np.cos(-angle_horizontal_rad), 0, np.sin(-angle_horizontal_rad)],
-#         [0, 1, 0],
-#         [-np.sin(-angle_horizontal_rad), 0, np.cos(-angle_horizontal_rad)]
-#     ])
-    
-#     # vertical angle rotates around X-axis
-#     rotation_pitch = np.array([
-#         [1, 0, 0],
-#         [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
-#         [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
-#     ])
-    
-#     rotation = rotation_pitch @ rotation_yaw
-    
-#     rotated_pointcloud.rotate(rotation, center=[0, 0, 0])
-    
-#     return rotated_pointcloud
-
-# def adjust_pointclouds_by_chunk_rotation(pointclouds, chunks):
-#     adjusted_pointclouds = []
-#     for pointcloud, chunk in zip(pointclouds, chunks):
-#         adjusted_pointcloud = adjust_pointcloud_by_chunk_rotation(pointcloud, chunk)
-#         adjusted_pointclouds.append(adjusted_pointcloud)
-#     return adjusted_pointclouds
-
 def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
     # create copy
     if isinstance(geometry, open3d.geometry.TriangleMesh):
@@ -371,4 +316,33 @@ def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector, sca
     
     return transformed_mesh
 
-        
+def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector):
+    """
+    Frontend hook for SAM3D transform adjustment.
+    Convert SAM3D Z-up transforms into Y-up transforms, equivalent to
+    applying transforms in Z-up on a Y-up mesh and converting back.
+    """
+    _R_ZUP_TO_YUP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float32)
+    _R_YUP_TO_ZUP = _R_ZUP_TO_YUP.T
+
+    scale = normalize_scale_vector(scale_vector)
+    rotation = np.asarray(rotation_input, dtype=np.float32)
+    if rotation.reshape(-1).size == 4:
+        rotation_matrix_zup = open3d.geometry.get_rotation_matrix_from_quaternion(rotation.reshape(-1).tolist())
+    else:
+        rotation_matrix_zup = normalize_rotation_matrix(rotation)
+
+    # SAM3D inference applies transforms via PyTorch3D Transform3d (row-vector convention).
+    # Frontend mesh transforms use column-vector convention, so transpose rotation.
+    rotation_matrix_zup = rotation_matrix_zup.T
+
+    translation_zup = normalize_translation_vector(translation_vector)
+
+    adjusted_rotation = _R_ZUP_TO_YUP @ rotation_matrix_zup @ _R_YUP_TO_ZUP
+    adjusted_translation = _R_ZUP_TO_YUP @ translation_zup
+
+    # Optional facing correction in final Open3D (Y-up) space: mirror local Z axis.
+    mirror_z_open3d = np.diag([1.0, 1.0, -1.0]).astype(np.float32)
+    adjusted_rotation = adjusted_rotation @ mirror_z_open3d
+
+    return scale, adjusted_rotation, adjusted_translation

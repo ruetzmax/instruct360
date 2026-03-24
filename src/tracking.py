@@ -5,7 +5,7 @@ from matplotlib import image
 import msgpack
 
 from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
-from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, adjust_sam3d_transform
+from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import read_video_frames, get_color_by_index, mesh_to_dict
 from tqdm import tqdm
 
@@ -192,19 +192,25 @@ def reconstruct_meshes_for_class(
     adjusted_scales_list = []
     adjusted_rotations_list = []
     adjusted_translations_list = []
+    chunk_relative_scales_list = []
+    chunk_relative_rotations_list = []
+    chunk_relative_translations_list = []
     image_chunk_centers = []
     image_chunk_sizes = []
     
     for chunk, unposed_mesh, scale, rot, trans in zip(image_chunks, unposed_meshes, scales, rotations, translations):
-        adjusted_scale, adjusted_sam3d_rot, adjusted_sam3d_trans = adjust_sam3d_transform(scale, rot, trans)
-        adjusted_rot, adjusted_trans = adjust_transforms_by_chunk_rotation([adjusted_sam3d_rot], [adjusted_sam3d_trans], chunk)
-        adjusted_meshes.append(apply_mesh_transforms(unposed_mesh, adjusted_rot[0], adjusted_trans[0], adjusted_scale))
-        adjusted_scales_list.append(adjusted_scale)
-        adjusted_rotations_list.append(adjusted_rot[0])
-        adjusted_translations_list.append(adjusted_trans[0])
+        trimesh_scale, trimesh_rot, trimesh_trans = sam3d_transforms_to_trimesh(scale, rot, trans)
+        chunk_adjusted_rot, chunk_adjusted_trans = adjust_transforms_by_chunk_rotation([trimesh_rot], [trimesh_trans], chunk)
+        adjusted_meshes.append(apply_mesh_transforms(unposed_mesh, chunk_adjusted_rot[0], chunk_adjusted_trans[0], trimesh_scale))
+        chunk_relative_scales_list.append(trimesh_scale)
+        chunk_relative_rotations_list.append(trimesh_rot)
+        chunk_relative_translations_list.append(trimesh_trans)
+        adjusted_scales_list.append(trimesh_scale)
+        adjusted_rotations_list.append(chunk_adjusted_rot[0])
+        adjusted_translations_list.append(chunk_adjusted_trans[0])
         image_chunk_centers.append(chunk.center)
         image_chunk_sizes.append((int(chunk.image.shape[1]), int(chunk.image.shape[0])))
-    
+
     return (
         unposed_meshes,
         adjusted_meshes,
@@ -213,4 +219,7 @@ def reconstruct_meshes_for_class(
         adjusted_translations_list,
         image_chunk_centers,
         image_chunk_sizes,
+        chunk_relative_scales_list,
+        chunk_relative_rotations_list,
+        chunk_relative_translations_list,
     )
