@@ -21,6 +21,50 @@ class ImageChunk:
         self.angle = angle
         self.fov = fov
 
+    @classmethod
+    def from_image_point(
+        cls,
+        equirect: np.array,
+        chunk_center: Tuple[float, float],
+        chunk_size: Tuple[int, int] = (700, 700),
+        orientation: str = 'horizontal',
+    ):
+        h, w, _ = equirect.shape
+
+        cx, cy = chunk_center
+        if 0.0 <= cx <= 1.0 and 0.0 <= cy <= 1.0:
+            chunk_center_normalized = (float(cx), float(cy))
+        else:
+            chunk_center_normalized = (float(cx) / w, float(cy) / h)
+
+        lookup_angle_horizontal_rad = (chunk_center_normalized[0] - 0.5) * 2 * np.pi
+        lookup_angle_vertical_rad = (0.5 - chunk_center_normalized[1]) * np.pi
+
+        if orientation == 'vertical':
+            scene_angle_horizontal_rad = (0.5 - chunk_center_normalized[1]) * 2 * np.pi
+            scene_angle_vertical_rad = (chunk_center_normalized[0] - 0.5) * np.pi
+        elif orientation == 'horizontal':
+            scene_angle_horizontal_rad = (chunk_center_normalized[0] - 0.25) * 2 * np.pi
+            scene_angle_vertical_rad = (chunk_center_normalized[1] - 0.5) * np.pi
+        else:
+            raise ValueError("Orientation must be 'vertical' or 'horizontal'")
+
+        angle = (scene_angle_horizontal_rad, scene_angle_vertical_rad)
+
+        fov_x = 360 * (chunk_size[0] / w)
+        fov_y = 180 * (chunk_size[1] / h)
+        fov = (fov_x, fov_y)
+
+        image_chunk = e2p(
+            equirect,
+            fov_deg=(fov_x, fov_y),
+            u_deg=np.degrees(lookup_angle_horizontal_rad),
+            v_deg=np.degrees(lookup_angle_vertical_rad),
+            out_hw=chunk_size,
+        )
+
+        return cls(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov)
+
 
 _dino_runner = None
 _ovseg_runner = None
@@ -113,39 +157,17 @@ def get_2d_bounding_boxes(
 def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700), orientation='vertical'):
     # create an ImageChunk for each bounding box
     image_chunks = []
-    h, w, _ = image.shape
     for box in bounding_boxes:
         # box format: [0,1](cx, cy, w, h)
-        box_center_pixel = (int(box[0] * w), int(box[1] * h))
-        chunk_center_pixel = box_center_pixel
-        
-        #convert chunk center to normalized coordinates
-        chunk_center_normalized = (chunk_center_pixel[0] / w, chunk_center_pixel[1] / h)
-        
-        #calculate angle from image center
-        if orientation == 'vertical':
-            scene_angle_horizontal_rad = (0.5 - chunk_center_normalized[1]) * 2 * np.pi 
-            scene_angle_vertical_rad = (chunk_center_normalized[0] - 0.5) * np.pi 
-        elif orientation == 'horizontal':
-            lookup_angle_horizontal_rad = (chunk_center_normalized[0] - 0.5) * 2 * np.pi
-            lookup_angle_vertical_rad = (0.5 - chunk_center_normalized[1]) * np.pi
-            
-            scene_angle_horizontal_rad = (chunk_center_normalized[0] - 0.25) * 2 * np.pi 
-            scene_angle_vertical_rad = (chunk_center_normalized[1]-0.5) * np.pi
-        else:
-            raise ValueError("Orientation must be 'vertical' or 'horizontal'")
-            
-        angle = (scene_angle_horizontal_rad, scene_angle_vertical_rad)
-
-        # calculate fov
-        fov_x = 360 * (chunk_size[0] / w)
-        fov_y = 180 * (chunk_size[1] / h)
-        fov = (fov_x, fov_y)
-        
-        # extract image chunk by projecting equirectangular to perspective
-        image_chunk = e2p(image, fov_deg=(fov_x, fov_y), u_deg=np.degrees(lookup_angle_horizontal_rad), v_deg=np.degrees(lookup_angle_vertical_rad), out_hw=chunk_size)
-        
-        image_chunks.append(ImageChunk(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov))
+        chunk_center = (float(box[0]), float(box[1]))
+        image_chunks.append(
+            ImageChunk.from_image_point(
+                equirect=image,
+                chunk_center=chunk_center,
+                chunk_size=chunk_size,
+                orientation=orientation,
+            )
+        )
     
     return image_chunks
 

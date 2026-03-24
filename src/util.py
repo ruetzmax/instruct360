@@ -45,6 +45,22 @@ def normalize_translation_vector(translation_vector):
     return flat
 
 
+def normalize_scale_vector(scale_vector):
+    scale = np.asarray(scale_vector, dtype=np.float32)
+    if scale.shape == (3,):
+        return scale
+    if scale.shape == (1, 3):
+        return scale[0]
+    if scale.shape == (3, 1):
+        return scale[:, 0]
+
+    flat = scale.reshape(-1)
+    if flat.size != 3:
+        raise ValueError(f"Expected scale vector with 3 values, got shape {scale.shape}")
+
+    return flat
+
+
 def read_video_frames(video_path=None, left_video_path=None, right_video_path=None):
     if not video_path:
         if not left_video_path or not right_video_path:
@@ -220,10 +236,15 @@ def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
     
     return mesh
 
-def trimesh_to_open3d(mesh):
+
+def read_trimesh(mesh_or_path):
+    if isinstance(mesh_or_path, (str, os.PathLike)):
+        mesh = trimesh.load(mesh_or_path)
+    else:
+        mesh = mesh_or_path
+
     if isinstance(mesh, trimesh.Scene):
-        dumped = mesh.dump()
-        sub_meshes = [g for g in dumped if isinstance(g, trimesh.Trimesh)]
+        sub_meshes = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
         if not sub_meshes:
             raise ValueError("GLB scene does not contain any mesh geometry")
         textured = [
@@ -231,9 +252,15 @@ def trimesh_to_open3d(mesh):
             if getattr(getattr(g.visual, "material", None), "image", None) is not None
             or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
         ]
-        mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
-    elif not isinstance(mesh, trimesh.Trimesh):
-        raise TypeError(f"Unsupported trimesh type: {type(mesh)}")
+        return textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+
+    if not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(mesh)}")
+
+    return mesh
+
+def trimesh_to_open3d(mesh):
+    mesh = read_trimesh(mesh)
 
     # convert into open3d space
     vertices = np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, -1]

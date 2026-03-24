@@ -4,7 +4,7 @@ import numpy as np
 import open3d
 import trimesh
 from src.operations2d import ImageChunk
-from src.util import normalize_rotation_matrix, normalize_translation_vector
+from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 
@@ -100,7 +100,11 @@ def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     
     return rotated_centers, rotated_poses
 
-def adjust_transforms_by_chunk_rotation(rotation_matrices, translation_vectors, chunk: ImageChunk):
+def adjust_transforms_by_chunk_rotation(
+    rotation_matrices,
+    translation_vectors,
+    chunk: ImageChunk,
+):
     """
     Adjust rotation and translation matrices by chunk rotation.
     
@@ -114,7 +118,7 @@ def adjust_transforms_by_chunk_rotation(rotation_matrices, translation_vectors, 
         adjusted_translations: List of adjusted 3D translation vectors
     """
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
-    
+
     # horizontal angle rotates around Y-axis
     rotation_yaw = np.array([
         [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
@@ -145,6 +149,30 @@ def adjust_transforms_by_chunk_rotation(rotation_matrices, translation_vectors, 
         adjusted_translations.append(adjusted_translation)
     
     return adjusted_rotations, adjusted_translations
+
+
+def _rotation_matrix_from_sam3d_quaternion(rotation_quaternion):
+    rotation = np.asarray(rotation_quaternion, dtype=np.float32).reshape(-1)
+    if rotation.size != 4:
+        raise ValueError(f"Expected rotation quaternion with 4 values, got shape {np.asarray(rotation_quaternion).shape}")
+    return open3d.geometry.get_rotation_matrix_from_quaternion(rotation.tolist())
+
+
+def adjust_sam3d_transform(scale_vector, rotation_quaternion, translation_vector):
+    """
+    Frontend hook for SAM3D transform adjustment.
+    Currently identity: returns raw SAM3D transform values converted to
+    frontend-friendly representation (rotation matrix + vectors).
+    """
+    scale = normalize_scale_vector(scale_vector)
+    rotation_matrix = _rotation_matrix_from_sam3d_quaternion(rotation_quaternion)
+    translation = normalize_translation_vector(translation_vector)
+
+    adjustment = np.eye(4, dtype=np.float32)
+    adjusted_rotation = adjustment[:3, :3] @ rotation_matrix
+    adjusted_translation = adjustment[:3, :3] @ translation + adjustment[:3, 3]
+
+    return scale, adjusted_rotation, adjusted_translation
 
 # def adjust_pointcloud_by_chunk_rotation(pointcloud, chunk: ImageChunk):
 #     rotated_pointcloud = open3d.geometry.PointCloud(pointcloud)
@@ -284,79 +312,61 @@ def reconstruct_meshes_for_chunks(
     
     meshes = []
     unposed_meshes = []
+    scales = []
     rotations = []
     translations = []
     
     for glb_path in output_data["glb_paths"]:
-        trimesh_mesh = trimesh.load(glb_path)
-        # Extract the first textured mesh or the largest if none have textures
-        if isinstance(trimesh_mesh, trimesh.Scene):
-            sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-            if not sub_meshes:
-                raise ValueError("GLB scene does not contain any mesh geometry")
-            textured = [
-                g for g in sub_meshes
-                if getattr(getattr(g.visual, "material", None), "image", None) is not None
-                or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
-            ]
-            trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
-        elif not isinstance(trimesh_mesh, trimesh.Trimesh):
-            raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(trimesh_mesh)}")
-        
+        trimesh_mesh = read_trimesh(glb_path)
         meshes.append(trimesh_mesh)
     
     for unposed_glb_path in output_data["unposed_glb_paths"]:
-        trimesh_mesh = trimesh.load(unposed_glb_path)
-        # Extract the first textured mesh or the largest if none have textures
-        if isinstance(trimesh_mesh, trimesh.Scene):
-            sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-            if not sub_meshes:
-                raise ValueError("GLB scene does not contain any mesh geometry")
-            textured = [
-                g for g in sub_meshes
-                if getattr(getattr(g.visual, "material", None), "image", None) is not None
-                or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
-            ]
-            trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
-        elif not isinstance(trimesh_mesh, trimesh.Trimesh):
-            raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(trimesh_mesh)}")
-        
+        trimesh_mesh = read_trimesh(unposed_glb_path)
         unposed_meshes.append(trimesh_mesh)
     
-    for rotation_matrix in output_data["rotation_matrices"]:
-        rotations.append(np.array(rotation_matrix))
+    for scale_vector in output_data.get("scales", []):
+        scales.append(np.array(scale_vector))
     
-    for translation_vector in output_data["translation_vectors"]:
-        translations.append(np.array(translation_vector))
-    
-    return meshes, unposed_meshes, rotations, translations
+    for rotation_quaternion in output_data.get("rotations", []):
+        rotations.append(np.array(rotation_quaternion))
 
-def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector):
+    for translation_vector in output_data.get("translations", []):
+        translations.append(np.array(translation_vector))
+
+    if not scales and rotations:
+        scales = [np.ones(3, dtype=np.float32) for _ in rotations]
+    
+    return meshes, unposed_meshes, scales, rotations, translations
+
+def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector, scale_vector=None):
     """
     Apply rotation and translation transforms to an unposed mesh.
     
     Args:
-        unposed_mesh: trimesh.Trimesh object (unposed)
+        unposed_mesh: trimesh.Trimesh or trimesh.Scene object (unposed)
         rotation_matrix: 3x3 numpy array (Y-up coordinate system)
         translation_vector: 3D numpy array (Y-up coordinate system)
+        scale_vector: 3D scale vector
     
     Returns:
-        trimesh.Trimesh object with transforms applied
+        trimesh.Trimesh or trimesh.Scene object with transforms applied
     """
-    if not isinstance(unposed_mesh, trimesh.Trimesh):
-        raise TypeError(f"Expected trimesh.Trimesh, got {type(unposed_mesh)}")
+    if not isinstance(unposed_mesh, (trimesh.Trimesh, trimesh.Scene)):
+        raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(unposed_mesh)}")
 
     normalized_rotation = normalize_rotation_matrix(rotation_matrix)
     normalized_translation = normalize_translation_vector(translation_vector)
+    normalized_scale = np.ones(3, dtype=np.float32) if scale_vector is None else normalize_scale_vector(scale_vector)
     
     transformed_mesh = unposed_mesh.copy()
     
     # Create 4x4 transformation matrix
     transform_4x4 = np.eye(4, dtype=np.float32)
-    transform_4x4[:3, :3] = normalized_rotation
+    scale_matrix = np.diag(normalized_scale)
+    transform_4x4[:3, :3] = normalized_rotation @ scale_matrix
     transform_4x4[:3, 3] = normalized_translation
     
-    # Apply transformation to mesh
+    # Apply transformation to mesh or scene
     transformed_mesh.apply_transform(transform_4x4)
     
     return transformed_mesh
