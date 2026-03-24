@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.tracking import track_objects_in_video    
 
-def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, orientation, video_format, output_path):
+def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, colors, orientation, video_format, use_gpu=False, output_path=None):
     tracking_results = track_objects_in_video(
         video_path=video_path,
         classes=classes,
@@ -17,7 +17,8 @@ def do_tracking(video_path, classes, threshold_2d, threshold_3d, export_meshes, 
         export_meshes=export_meshes,
         colors=colors,
         orientation=orientation,
-        video_format=video_format
+        video_format=video_format,
+        use_gpu=use_gpu,
     )
     with open(output_path, 'wb') as f:
         pickle.dump(tracking_results, f)
@@ -86,6 +87,13 @@ if __name__ == "__main__":
         choices=['equirectangular', 'undistorted'],
         help="Format of the input video"
     )
+
+    parser.add_argument(
+        "--use_gpu",
+        action="store_true",
+        default=False,
+        help="Use GPU for supported model inference"
+    )
     
     parser.add_argument(
         "--output",
@@ -122,5 +130,6 @@ if __name__ == "__main__":
         colors=colors,
         orientation=args.orientation,
         video_format=args.video_format,
+        use_gpu=args.use_gpu,
         output_path=output_path
     )
