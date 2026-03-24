@@ -11,21 +11,34 @@ from src.tracking import track_camera_poses
 def append_camera_poses(input_video_path, object_pkl_path, output_pkl_path, video_format='equirectangular'):
     camera_poses = track_camera_poses(input_video_path, video_format=video_format)
     
-    with open(object_pkl_path, 'rb') as f:
-        frames_data = pickle.load(f)
-        
-    for frame_idx, frame_data in enumerate(frames_data):
-        
-        if frame_idx == len(camera_poses):
-            continue
-        
-        frame_pose = camera_poses[frame_idx]
-        frame_data['camera_translation'] = frame_pose["translation"]
-        frame_data['camera_rotation'] = frame_pose["rotation"]
-        frame_data['landmarks'] = frame_pose["landmarks"]
+    has_input_pkl = object_pkl_path is not None and Path(object_pkl_path).exists()
+
+    if has_input_pkl:
+        with open(object_pkl_path, 'rb') as f:
+            frames_data = pickle.load(f)
+
+        for frame_idx, frame_data in enumerate(frames_data):
+            if frame_idx == len(camera_poses):
+                continue
+
+            frame_pose = camera_poses[frame_idx]
+            frame_data['camera_translation'] = frame_pose["translation"]
+            frame_data['camera_rotation'] = frame_pose["rotation"]
+            frame_data['landmarks'] = frame_pose["landmarks"]
+    else:
+        frames_data = []
+        for frame_pose in camera_poses:
+            frames_data.append({
+                'camera_translation': frame_pose["translation"],
+                'camera_rotation': frame_pose["rotation"],
+                'landmarks': frame_pose["landmarks"]
+            })
         
     if output_pkl_path is None:
-        output_pkl_path = object_pkl_path
+        if has_input_pkl:
+            output_pkl_path = object_pkl_path
+        else:
+            output_pkl_path = str(Path(input_video_path).with_suffix('.camera_poses.pkl'))
         
     with open(output_pkl_path, 'wb') as f:
         pickle.dump(frames_data, f)
@@ -45,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input_pkl",
         type=str,
-        required=True,
+        required=False,
         help="Path to the input object pickle file"
     )
     parser.add_argument(

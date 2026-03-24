@@ -103,7 +103,13 @@ def _read_glb(glb_path):
     glb = trimesh_to_open3d(trimesh_mesh)
     return glb
 
-def do_visualization(object_pkl_path: str, output_video_path: str = None):
+def do_visualization(
+    object_pkl_path: str,
+    output_video_path: str = None,
+    show_poses: bool = True,
+    show_reconstructed: bool = True,
+    show_bboxes: bool = True,
+):
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
         
@@ -139,65 +145,61 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         frame_meshes = []
         meshes_to_draw = []
         
-        # add 3d bounding box meshes
-        class_dicts = frame_data['classes']
-        for class_dict in class_dicts:
-            class_name = class_dict['class_name']
-            bb_centers = class_dict['centers']
-            bb_dimensions = class_dict['dimensions']
-            bb_poses = class_dict['poses']
-            meshes = get_box_meshes((bb_centers, bb_dimensions, bb_poses))
-            
-            # filter out duplicate meshes
-            for mesh_idx, mesh in enumerate(meshes):
-                if frame_camera_translation and frame_camera_rotation:
-                    mesh = adjust_pose_by_camera_pose(mesh, frame_camera_translation, frame_camera_rotation)
-                    
-                frame_meshes.append(mesh)
-                    
-                unique_idx = _get_unique_index(mesh, class_name)
-                
-                # only use new dimension/position/pose if it changes significantly
-                global dimension_change_threshold, position_change_threshold, pose_change_threshold
-                
-                previous_mesh = unique_meshes_by_class[class_name][unique_idx]
-                previous_dimension = previous_mesh.get_oriented_bounding_box().extent
-                previous_center = previous_mesh.get_center()
-                previous_pose = previous_mesh.get_oriented_bounding_box().R
-                
-                current_dimension = mesh.get_oriented_bounding_box().extent
-                current_center = mesh.get_center()
-                current_pose = mesh.get_oriented_bounding_box().R
-                
-                relative_dimension_change = abs(current_dimension - previous_dimension) / (previous_dimension + 1e-6)
-                if relative_dimension_change.max() > dimension_change_threshold:
-                    new_dimension = current_dimension
-                else:
-                    new_dimension = previous_dimension
-                    
-                absolute_position_change = np.linalg.norm(np.array(current_center) - np.array(previous_center))
-                if absolute_position_change > position_change_threshold:
-                    new_center = current_center
-                else:
-                    new_center = previous_center
-                    
-                absolute_pose_change = np.linalg.norm(current_pose - previous_pose)
-                if absolute_pose_change > pose_change_threshold:
-                    new_pose = current_pose
-                else:
-                    new_pose = previous_pose
-                
-                #create open3d oriented bb
-                new_mesh = open3d.geometry.OrientedBoundingBox(new_center, new_pose, new_dimension)
-                #convert to triangle mesh
-                new_mesh = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(new_mesh)
-                
-                # new_mesh = get_box_mesh((current_center, new_dimension, current_pose))
-                # new_mesh = adjust_pose_by_camera_pose(new_mesh, frame_camera_translation, frame_camera_rotation)
-                
-                unique_meshes_by_class[class_name][unique_idx] = new_mesh
-                
-                # unique_meshes_by_class[class_name][unique_idx] = mesh
+        if show_bboxes:
+            class_dicts = frame_data.get('classes', [])
+            for class_dict in class_dicts:
+                if not isinstance(class_dict, dict):
+                    continue
+
+                class_name = class_dict.get('class_name')
+                bb_centers = class_dict.get('centers')
+                bb_dimensions = class_dict.get('dimensions')
+                bb_poses = class_dict.get('poses')
+
+                if class_name is None or bb_centers is None or bb_dimensions is None or bb_poses is None:
+                    continue
+
+                meshes = get_box_meshes((bb_centers, bb_dimensions, bb_poses))
+                for mesh_idx, mesh in enumerate(meshes):
+                    if frame_camera_translation and frame_camera_rotation:
+                        mesh = adjust_pose_by_camera_pose(mesh, frame_camera_translation, frame_camera_rotation)
+
+                    frame_meshes.append(mesh)
+
+                    unique_idx = _get_unique_index(mesh, class_name)
+
+                    global dimension_change_threshold, position_change_threshold, pose_change_threshold
+
+                    previous_mesh = unique_meshes_by_class[class_name][unique_idx]
+                    previous_dimension = previous_mesh.get_oriented_bounding_box().extent
+                    previous_center = previous_mesh.get_center()
+                    previous_pose = previous_mesh.get_oriented_bounding_box().R
+
+                    current_dimension = mesh.get_oriented_bounding_box().extent
+                    current_center = mesh.get_center()
+                    current_pose = mesh.get_oriented_bounding_box().R
+
+                    relative_dimension_change = abs(current_dimension - previous_dimension) / (previous_dimension + 1e-6)
+                    if relative_dimension_change.max() > dimension_change_threshold:
+                        new_dimension = current_dimension
+                    else:
+                        new_dimension = previous_dimension
+
+                    absolute_position_change = np.linalg.norm(np.array(current_center) - np.array(previous_center))
+                    if absolute_position_change > position_change_threshold:
+                        new_center = current_center
+                    else:
+                        new_center = previous_center
+
+                    absolute_pose_change = np.linalg.norm(current_pose - previous_pose)
+                    if absolute_pose_change > pose_change_threshold:
+                        new_pose = current_pose
+                    else:
+                        new_pose = previous_pose
+
+                    new_mesh = open3d.geometry.OrientedBoundingBox(new_center, new_pose, new_dimension)
+                    new_mesh = open3d.geometry.TriangleMesh.create_from_oriented_bounding_box(new_mesh)
+                    unique_meshes_by_class[class_name][unique_idx] = new_mesh
           
         if ENABLE_FILTERING:
             # render all unique meshes  
@@ -209,65 +211,62 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
         else:
             #render all meshes
             for mesh in frame_meshes:
-                if class_name in class_colors:
-                        mesh.paint_uniform_color(class_colors[class_name])
                 meshes_to_draw.append(mesh)
                 
         # add reconstructed meshes as static geometry
-        reconstructed_meshes_data = {}
-        frame_classes_for_meshes = frame_data.get('classes', [])
-        for class_dict in frame_classes_for_meshes:
-            if not isinstance(class_dict, dict):
-                continue
-            class_name = class_dict.get('class_name')
-            class_meshes = class_dict.get('reconstructed_meshes', [])
-            if class_name and class_meshes:
-                reconstructed_meshes_data[class_name] = class_meshes
+        if show_reconstructed:
+            reconstructed_meshes_data = {}
+            frame_classes_for_meshes = frame_data.get('classes', [])
+            for class_dict in frame_classes_for_meshes:
+                if not isinstance(class_dict, dict):
+                    continue
+                class_name = class_dict.get('class_name')
+                class_meshes = class_dict.get('reconstructed_meshes', [])
+                if class_name and class_meshes:
+                    reconstructed_meshes_data[class_name] = class_meshes
 
-        if reconstructed_meshes_data:
-            for class_name, meshes_info_list in reconstructed_meshes_data.items():
-                for mesh_info in meshes_info_list:
-                    unposed_mesh_path = mesh_info.get('unposed_mesh_path')
-                    rotation = np.array(mesh_info.get('rotation'))
-                    translation = np.array(mesh_info.get('translation'))
-                    
-                    if unposed_mesh_path and os.path.exists(unposed_mesh_path):
-                        try:
-                            unposed_mesh = trimesh.load(unposed_mesh_path)
-                            # Apply transform
-                            transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation)
-                            open3d_mesh = trimesh_to_open3d(transformed_mesh)
-                            
-                            if frame_camera_translation and frame_camera_rotation:
-                                open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
-                            
-                            # Apply class color if available
-                            if class_name in class_colors:
-                                open3d_mesh.paint_uniform_color(class_colors[class_name])
-                            
-                            static_geometries.append(open3d_mesh)
-                        except Exception as e:
-                            print(f"Error loading mesh from {unposed_mesh_path}: {e}")
+            if reconstructed_meshes_data:
+                for class_name, meshes_info_list in reconstructed_meshes_data.items():
+                    for mesh_info in meshes_info_list:
+                        unposed_mesh_path = mesh_info.get('unposed_mesh_path')
+                        rotation = np.array(mesh_info.get('rotation'))
+                        translation = np.array(mesh_info.get('translation'))
+
+                        if unposed_mesh_path and os.path.exists(unposed_mesh_path):
+                            try:
+                                unposed_mesh = trimesh.load(unposed_mesh_path)
+                                transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation)
+                                open3d_mesh = trimesh_to_open3d(transformed_mesh)
+
+                                if frame_camera_translation and frame_camera_rotation:
+                                    open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
+
+                                if class_name in class_colors:
+                                    open3d_mesh.paint_uniform_color(class_colors[class_name])
+
+                                static_geometries.append(open3d_mesh)
+                            except Exception as e:
+                                print(f"Error loading mesh from {unposed_mesh_path}: {e}")
 
         
         # add character
-        placeholder = get_character_placeholder()
-        axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+        if show_poses:
+            placeholder = get_character_placeholder()
+            axis = open3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
 
-        if frame_camera_translation and frame_camera_rotation:
-            placeholder = adjust_pose_by_camera_pose(placeholder, frame_camera_translation, frame_camera_rotation)
-            axis = adjust_pose_by_camera_pose(axis, frame_camera_translation, frame_camera_rotation)
-            
-        meshes_to_draw.append(placeholder)
-        meshes_to_draw.append(axis)
-        
-        # add landmarks
-        global world_landmarks
-        landmarks = frame_data.get('landmarks', [])
-        world_landmarks.extend(landmarks)
-        if world_landmarks:
-            landmarks_pointcloud = _point_cloud_from_landmarks(world_landmarks)
-            meshes_to_draw.append(landmarks_pointcloud)
+            if frame_camera_translation and frame_camera_rotation:
+                placeholder = adjust_pose_by_camera_pose(placeholder, frame_camera_translation, frame_camera_rotation)
+                axis = adjust_pose_by_camera_pose(axis, frame_camera_translation, frame_camera_rotation)
+
+            meshes_to_draw.append(placeholder)
+            meshes_to_draw.append(axis)
+
+            global world_landmarks
+            landmarks = frame_data.get('landmarks', [])
+            world_landmarks.extend(landmarks)
+            if world_landmarks:
+                landmarks_pointcloud = _point_cloud_from_landmarks(world_landmarks)
+                meshes_to_draw.append(landmarks_pointcloud)
         
         # draw geometries
         vis.clear_geometries()    
@@ -352,6 +351,30 @@ if __name__ == "__main__":
         default=None,
         help="Path to output video file (MP4). If provided, will render all frames and save as video."
     )
+
+    parser.add_argument(
+        "--no_poses",
+        action="store_true",
+        help="Disable camera pose visualization (character, axis, landmarks)."
+    )
+
+    parser.add_argument(
+        "--no_reconstructed",
+        action="store_true",
+        help="Disable reconstructed mesh visualization."
+    )
+
+    parser.add_argument(
+        "--no_bboxes",
+        action="store_true",
+        help="Disable 3D bounding box visualization."
+    )
     
     args = parser.parse_args()
-    do_visualization(args.input, args.output_video)
+    do_visualization(
+        args.input,
+        args.output_video,
+        show_poses=not args.no_poses,
+        show_reconstructed=not args.no_reconstructed,
+        show_bboxes=not args.no_bboxes,
+    )
