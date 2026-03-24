@@ -87,6 +87,7 @@ def get_2d_bounding_boxes(
     sam3_env="sam3",
 ):
     if use_gpu:
+        threshold = 0.7
         runner = _get_sam3_runner(sam3_env)
         input_data = {
             "chunk_images_base64": [image_to_base64(image)],
