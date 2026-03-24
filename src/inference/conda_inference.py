@@ -4,7 +4,8 @@ Base class for running inference in separate conda environments
 import os
 import subprocess
 import json
-import tempfile
+import shutil
+from pathlib import Path
 from typing import Dict, Any
 
 
@@ -14,6 +15,36 @@ class CondaInferenceRunner:
         self.script_name = script_name
         self.temp_dir = temp_dir
         self.script_path = os.path.join(os.path.dirname(__file__), script_name)
+
+    def _resolve_conda_executable(self) -> str:
+        candidates = []
+
+        conda_exe_env = os.environ.get("CONDA_EXE")
+        if conda_exe_env:
+            candidates.append(conda_exe_env)
+
+        for executable in ("conda", "mamba", "micromamba"):
+            resolved = shutil.which(executable)
+            if resolved:
+                candidates.append(resolved)
+
+        home = Path.home()
+        candidates.extend([
+            str(home / "miniconda3" / "condabin" / "conda"),
+            str(home / "anaconda3" / "condabin" / "conda"),
+            str(home / "mambaforge" / "condabin" / "conda"),
+            str(home / "miniforge3" / "condabin" / "conda"),
+            "/opt/conda/bin/conda",
+            "/opt/conda/condabin/conda",
+        ])
+
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+
+        raise RuntimeError(
+            "Could not find a conda executable. Set CONDA_EXE or add conda to PATH."
+        )
     
     def run(self, input_data: Dict[str, Any], verbose: bool = True) -> Dict[str, Any]:
         # write input data
@@ -24,14 +55,27 @@ class CondaInferenceRunner:
         
         with open(input_json, 'w') as f:
             json.dump(input_data, f)
+
+        if os.path.exists(output_json):
+            os.remove(output_json)
         
         # execute command
-        cmd = f"conda run -n {self.env_name} python {self.script_path} {input_json} {output_json}"
+        conda_executable = self._resolve_conda_executable()
+        cmd = [
+            conda_executable,
+            "run",
+            "-n",
+            self.env_name,
+            "python",
+            self.script_path,
+            input_json,
+            output_json,
+        ]
         
         if verbose:
             print(f"Running {base_name} in conda environment '{self.env_name}'...")
         
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
         # check for errors
         if result.returncode != 0:
@@ -40,11 +84,15 @@ class CondaInferenceRunner:
                 error_msg += f"\nStderr: {result.stderr}"
             if result.stdout:
                 error_msg += f"\nStdout: {result.stdout}"
-            # raise RuntimeError(error_msg)
-            print(error_msg)
+            raise RuntimeError(error_msg)
         
         if verbose and result.stdout:
             print(result.stdout)
+
+        if not os.path.exists(output_json):
+            raise RuntimeError(
+                f"{base_name} inference did not produce output file: {output_json}"
+            )
         
         # read output
         with open(output_json, 'r') as f:
