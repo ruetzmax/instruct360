@@ -30,7 +30,7 @@ def reconstruct_meshes(
     reconstructed_meshes_by_class = {}
     
     for class_name in classes:
-        unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations = reconstruct_meshes_for_class(
+        unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations, image_chunk_centers, image_chunk_sizes = reconstruct_meshes_for_class(
             frame,
             class_name,
             generate_texture=generate_texture,
@@ -48,8 +48,8 @@ def reconstruct_meshes(
         
         class_meshes_data = []
         
-        for idx, (unposed_mesh, _, scale, rotation, translation) in enumerate(zip(
-            unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations
+        for idx, (unposed_mesh, _, scale, rotation, translation, image_chunk_center, image_chunk_size) in enumerate(zip(
+            unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations, image_chunk_centers, image_chunk_sizes
         )):
             # Save unposed mesh
             unposed_path = f"{class_dir}/unposed_{idx}.glb"
@@ -60,6 +60,8 @@ def reconstruct_meshes(
                 'scale': scale.tolist() if isinstance(scale, np.ndarray) else scale,
                 'rotation': rotation.tolist() if isinstance(rotation, np.ndarray) else rotation,
                 'translation': translation.tolist() if isinstance(translation, np.ndarray) else translation,
+                'image_chunk_center': list(image_chunk_center) if isinstance(image_chunk_center, tuple) else image_chunk_center,
+                'image_chunk_size': list(image_chunk_size) if isinstance(image_chunk_size, tuple) else image_chunk_size,
             })
         
         reconstructed_meshes_by_class[class_name] = class_meshes_data

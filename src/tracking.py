@@ -192,6 +192,8 @@ def reconstruct_meshes_for_class(
     adjusted_scales_list = []
     adjusted_rotations_list = []
     adjusted_translations_list = []
+    image_chunk_centers = []
+    image_chunk_sizes = []
     
     for chunk, unposed_mesh, scale, rot, trans in zip(image_chunks, unposed_meshes, scales, rotations, translations):
         adjusted_scale, adjusted_sam3d_rot, adjusted_sam3d_trans = adjust_sam3d_transform(scale, rot, trans)
@@ -200,5 +202,15 @@ def reconstruct_meshes_for_class(
         adjusted_scales_list.append(adjusted_scale)
         adjusted_rotations_list.append(adjusted_rot[0])
         adjusted_translations_list.append(adjusted_trans[0])
+        image_chunk_centers.append(chunk.center)
+        image_chunk_sizes.append((int(chunk.image.shape[1]), int(chunk.image.shape[0])))
     
-    return unposed_meshes, adjusted_meshes, adjusted_scales_list, adjusted_rotations_list, adjusted_translations_list
+    return (
+        unposed_meshes,
+        adjusted_meshes,
+        adjusted_scales_list,
+        adjusted_rotations_list,
+        adjusted_translations_list,
+        image_chunk_centers,
+        image_chunk_sizes,
+    )
