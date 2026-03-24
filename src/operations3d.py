@@ -99,7 +99,50 @@ def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
     
     return rotated_centers, rotated_poses
 
-def adjust_mesh_by_chunk_rotation(mesh, chunk: ImageChunk, scale=1.0):
+def adjust_transforms_by_chunk_rotation(rotation_matrices, translation_vectors, chunk: ImageChunk):
+    """
+    Adjust rotation and translation matrices by chunk rotation.
+    
+    Args:
+        rotation_matrices: List of 3x3 rotation matrices
+        translation_vectors: List of 3D translation vectors
+        chunk: ImageChunk with angle information
+    
+    Returns:
+        adjusted_rotations: List of adjusted 3x3 rotation matrices
+        adjusted_translations: List of adjusted 3D translation vectors
+    """
+    angle_horizontal_rad, angle_vertical_rad = chunk.angle
+    
+    # horizontal angle rotates around Y-axis
+    rotation_yaw = np.array([
+        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
+        [0, 1, 0],
+        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
+    ])
+    
+    # vertical angle rotates around X-axis
+    rotation_pitch = np.array([
+        [1, 0, 0],
+        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
+        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
+    ])
+    
+    chunk_rotation = rotation_pitch @ rotation_yaw
+    
+    adjusted_rotations = []
+    adjusted_translations = []
+    
+    for rotation_matrix in rotation_matrices:
+        adjusted_rotation = chunk_rotation @ rotation_matrix
+        adjusted_rotations.append(adjusted_rotation)
+    
+    for translation_vector in translation_vectors:
+        adjusted_translation = chunk_rotation @ translation_vector
+        adjusted_translations.append(adjusted_translation)
+    
+    return adjusted_rotations, adjusted_translations
+
     if not isinstance(mesh, trimesh.Trimesh):
         raise TypeError(f"Expected trimesh.Trimesh, got {type(mesh)}")
     
@@ -272,6 +315,10 @@ def reconstruct_meshes_for_chunks(
     output_data = runner.run(input_data)
     
     meshes = []
+    unposed_meshes = []
+    rotations = []
+    translations = []
+    
     for glb_path in output_data["glb_paths"]:
         trimesh_mesh = trimesh.load(glb_path)
         # Extract the first textured mesh or the largest if none have textures
@@ -290,5 +337,57 @@ def reconstruct_meshes_for_chunks(
         
         meshes.append(trimesh_mesh)
     
-    return meshes
+    for unposed_glb_path in output_data["unposed_glb_paths"]:
+        trimesh_mesh = trimesh.load(unposed_glb_path)
+        # Extract the first textured mesh or the largest if none have textures
+        if isinstance(trimesh_mesh, trimesh.Scene):
+            sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
+            if not sub_meshes:
+                raise ValueError("GLB scene does not contain any mesh geometry")
+            textured = [
+                g for g in sub_meshes
+                if getattr(getattr(g.visual, "material", None), "image", None) is not None
+                or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
+            ]
+            trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+        elif not isinstance(trimesh_mesh, trimesh.Trimesh):
+            raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(trimesh_mesh)}")
+        
+        unposed_meshes.append(trimesh_mesh)
+    
+    for rotation_matrix in output_data["rotation_matrices"]:
+        rotations.append(np.array(rotation_matrix))
+    
+    for translation_vector in output_data["translation_vectors"]:
+        translations.append(np.array(translation_vector))
+    
+    return meshes, unposed_meshes, rotations, translations
+
+def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector):
+    """
+    Apply rotation and translation transforms to an unposed mesh.
+    
+    Args:
+        unposed_mesh: trimesh.Trimesh object (unposed)
+        rotation_matrix: 3x3 numpy array (Y-up coordinate system)
+        translation_vector: 3D numpy array (Y-up coordinate system)
+    
+    Returns:
+        trimesh.Trimesh object with transforms applied
+    """
+    if not isinstance(unposed_mesh, trimesh.Trimesh):
+        raise TypeError(f"Expected trimesh.Trimesh, got {type(unposed_mesh)}")
+    
+    transformed_mesh = unposed_mesh.copy()
+    
+    # Create 4x4 transformation matrix
+    transform_4x4 = np.eye(4)
+    transform_4x4[:3, :3] = rotation_matrix
+    transform_4x4[:3, 3] = translation_vector
+    
+    # Apply transformation to mesh
+    transformed_mesh.apply_transform(transform_4x4)
+    
+    return transformed_mesh
+
         

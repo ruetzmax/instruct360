@@ -3,6 +3,7 @@ import pickle
 import sys
 import argparse
 import trimesh
+import numpy as np
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -16,32 +17,50 @@ def reconstruct_meshes(
     input_pkl=None,
     output_pkl=None,
     frame_index=0,
-    generate_texture=False,
+    generate_texture=True,
 ):
     input_frames = read_video_frames(video_path)
     frame = input_frames[frame_index]
     
-    all_meshes = []
+    reconstructed_meshes_by_class = {}
+    
     for class_name in classes:
-        class_meshes = reconstruct_meshes_for_class(
+        unposed_meshes, adjusted_meshes, adjusted_rotations, adjusted_translations = reconstruct_meshes_for_class(
             frame,
             class_name,
             generate_texture=generate_texture,
             use_gpu=True,
         )
-        all_meshes.extend(class_meshes)
+        
+        if not unposed_meshes:
+            continue
+        
+        class_dir = f"{output_dir}/{class_name}"
+        Path(class_dir).mkdir(parents=True, exist_ok=True)
+        
+        class_meshes_data = []
+        
+        for idx, (unposed_mesh, adjusted_mesh, rotation, translation) in enumerate(zip(
+            unposed_meshes, adjusted_meshes, adjusted_rotations, adjusted_translations
+        )):
+            # Save unposed mesh
+            unposed_path = f"{class_dir}/unposed_{idx}.glb"
+            unposed_mesh.export(unposed_path)
+            
+            class_meshes_data.append({
+                'unposed_mesh_path': unposed_path,
+                'rotation': rotation.tolist() if isinstance(rotation, np.ndarray) else rotation,
+                'translation': translation.tolist() if isinstance(translation, np.ndarray) else translation,
+            })
+        
+        reconstructed_meshes_by_class[class_name] = class_meshes_data
     
-    # Combine all meshes into one
-    if not all_meshes:
-        print("No meshes found to combine")
+    if not reconstructed_meshes_by_class:
+        print("No meshes found to reconstruct")
         return
     
-    combined_mesh = trimesh.util.concatenate(all_meshes)
-    
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_file = f"{output_dir}/{frame_index}.glb"
-    combined_mesh.export(output_file)
-    print(f"Saved combined mesh to {output_file}")
+    print(f"Saved meshes for {len(reconstructed_meshes_by_class)} classes")
     
     if input_pkl:
         if not output_pkl:
@@ -50,10 +69,13 @@ def reconstruct_meshes(
         with open(input_pkl, 'rb') as f:
             frames_data = pickle.load(f)
         
-        frames_data[frame_index]['reconstructed_mesh_path'] = output_file
+        frames_data[frame_index]['reconstructed_meshes'] = reconstructed_meshes_by_class
         
         with open(output_pkl, 'wb') as f:
             pickle.dump(frames_data, f)
+        
+        print(f"Saved mesh metadata to pickle file")
+
 
 def main():
     parser = argparse.ArgumentParser(

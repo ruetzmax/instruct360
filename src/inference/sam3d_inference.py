@@ -192,6 +192,10 @@ else:
             os.unlink(file_path)
 
 glb_paths = []
+unposed_glb_paths = []
+rotation_matrices = []
+translation_vectors = []
+
 for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64, chunk_masks_base64)):
     chunk_image = base64_to_image(chunk_image_b64)
     chunk_mask = base64_to_image(chunk_mask_b64)
@@ -204,6 +208,7 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
         chunk_mask = chunk_mask[..., 0]
 
     save_path = os.path.join(save_dir, f"reconstructed_mesh_{idx}.glb")
+    unposed_save_path = os.path.join(save_dir, f"reconstructed_mesh_unposed_{idx}.glb")
     
     # # save image (numpy_array) in save dir
     # chunk_image_pil = Image.fromarray(chunk_image)
@@ -217,15 +222,40 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
         with_texture_baking=generate_texture,
         use_vertex_color=not generate_texture,
     )
+    
+    # Save posed mesh
     posed_glb = make_scene_untextured_mesh(reconstruction_output)
     posed_glb.export(save_path)
-    # reconstruction_output["gs"].save_ply(save_path)
-    
     glb_paths.append(save_path)
+    
+    # Extract and save unposed mesh (in Y-up coordinate system)
+    mesh = reconstruction_output["glb"]
+    if mesh is not None:
+        unposed_mesh = deepcopy(mesh)
+        unposed_mesh.export(unposed_save_path)
+        unposed_glb_paths.append(unposed_save_path)
+        
+        # Extract transforms (convert to Y-up)
+        # The output rotation and translation are in Z-up space, so we convert them to Y-up
+        rotation_quat = reconstruction_output["rotation"].cpu().numpy()
+        R_l2c = quaternion_to_matrix(torch.from_numpy(rotation_quat).unsqueeze(0)).squeeze(0).cpu().numpy()
+        # Convert rotation from Z-up to Y-up
+        R_l2c_yup = _R_ZUP_TO_YUP @ R_l2c @ _R_YUP_TO_ZUP
+        rotation_matrices.append(R_l2c_yup.tolist())
+        
+        # Extract translation and convert to Y-up
+        translation = reconstruction_output["translation"].cpu().numpy()
+        # Reorder coordinates from Z-up [x, z, -y] to Y-up [x, y, z]
+        translation_yup = np.array([translation[0], -translation[2], translation[1]], dtype=np.float32)
+        translation_vectors.append(translation_yup.tolist())
+    
     print(f"Saved mesh {idx+1}/{len(chunk_images_base64)} to {save_path}")
 
 output_data = {
-    "glb_paths": glb_paths
+    "glb_paths": glb_paths,
+    "unposed_glb_paths": unposed_glb_paths,
+    "rotation_matrices": rotation_matrices,
+    "translation_vectors": translation_vectors,
 }
 
 save_inference_output(output_data)

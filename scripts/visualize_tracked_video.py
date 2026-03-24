@@ -13,7 +13,7 @@ import trimesh
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes
+from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes, apply_mesh_transforms
 from src.util import get_character_placeholder, trimesh_to_open3d
 
 FPS = 24
@@ -214,13 +214,32 @@ def do_visualization(object_pkl_path: str, output_video_path: str = None):
                 meshes_to_draw.append(mesh)
                 
         # add reconstructed meshes as static geometry
-        reconstructed_meshes_path = frame_data.get('reconstructed_meshes_path', None)
-        if reconstructed_meshes_path and os.path.exists(reconstructed_meshes_path):
-            reconstructed_meshes = _read_glb(reconstructed_meshes_path)
-            print("added static mesh")
-            if frame_camera_translation and frame_camera_rotation:
-                reconstructed_meshes = adjust_pose_by_camera_pose(reconstructed_meshes, frame_camera_translation, frame_camera_rotation)
-            static_geometries.append(reconstructed_meshes)
+        reconstructed_meshes_data = frame_data.get('reconstructed_meshes', {})
+        if reconstructed_meshes_data:
+            for class_name, meshes_info_list in reconstructed_meshes_data.items():
+                for mesh_info in meshes_info_list:
+                    unposed_mesh_path = mesh_info.get('unposed_mesh_path')
+                    rotation = np.array(mesh_info.get('rotation'))
+                    translation = np.array(mesh_info.get('translation'))
+                    
+                    if unposed_mesh_path and os.path.exists(unposed_mesh_path):
+                        try:
+                            unposed_mesh = trimesh.load(unposed_mesh_path)
+                            # Apply transform
+                            transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation)
+                            open3d_mesh = trimesh_to_open3d(transformed_mesh)
+                            
+                            if frame_camera_translation and frame_camera_rotation:
+                                open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
+                            
+                            # Apply class color if available
+                            if class_name in class_colors:
+                                open3d_mesh.paint_uniform_color(class_colors[class_name])
+                            
+                            static_geometries.append(open3d_mesh)
+                        except Exception as e:
+                            print(f"Error loading mesh from {unposed_mesh_path}: {e}")
+
         
         # add character
         placeholder = get_character_placeholder()
