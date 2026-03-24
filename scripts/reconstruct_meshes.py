@@ -30,7 +30,7 @@ def reconstruct_meshes(
     reconstructed_meshes_by_class = {}
     
     for class_name in classes:
-        unposed_meshes, adjusted_meshes, adjusted_rotations, adjusted_translations = reconstruct_meshes_for_class(
+        unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations = reconstruct_meshes_for_class(
             frame,
             class_name,
             generate_texture=generate_texture,
@@ -48,8 +48,8 @@ def reconstruct_meshes(
         
         class_meshes_data = []
         
-        for idx, (unposed_mesh, _, rotation, translation) in enumerate(zip(
-            unposed_meshes, adjusted_meshes, adjusted_rotations, adjusted_translations
+        for idx, (unposed_mesh, _, scale, rotation, translation) in enumerate(zip(
+            unposed_meshes, adjusted_meshes, adjusted_scales, adjusted_rotations, adjusted_translations
         )):
             # Save unposed mesh
             unposed_path = f"{class_dir}/unposed_{idx}.glb"
@@ -57,6 +57,7 @@ def reconstruct_meshes(
             
             class_meshes_data.append({
                 'unposed_mesh_path': unposed_path,
+                'scale': scale.tolist() if isinstance(scale, np.ndarray) else scale,
                 'rotation': rotation.tolist() if isinstance(rotation, np.ndarray) else rotation,
                 'translation': translation.tolist() if isinstance(translation, np.ndarray) else translation,
             })

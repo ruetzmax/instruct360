@@ -9,12 +9,11 @@ import msgpack
 import open3d
 import numpy as np
 import cv2
-import trimesh
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes, apply_mesh_transforms
-from src.util import get_character_placeholder, trimesh_to_open3d
+from src.util import get_character_placeholder, trimesh_to_open3d, read_trimesh
 
 FPS = 24
 
@@ -84,24 +83,6 @@ def _get_unique_index(mesh, class_name):
             return idx
     unique_meshes.append(mesh)
     return len(unique_meshes) - 1
-
-
-def _read_glb(glb_path):
-    trimesh_mesh = trimesh.load(glb_path)
-    # Handle scene: extract first textured mesh or largest
-    if isinstance(trimesh_mesh, trimesh.Scene):
-        sub_meshes = [g for g in trimesh_mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-        if not sub_meshes:
-            raise ValueError("GLB scene does not contain any mesh geometry")
-        textured = [
-            g for g in sub_meshes
-            if getattr(getattr(g.visual, "material", None), "image", None) is not None
-            or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
-        ]
-        trimesh_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
-    
-    glb = trimesh_to_open3d(trimesh_mesh)
-    return glb
 
 def do_visualization(
     object_pkl_path: str,
@@ -229,13 +210,14 @@ def do_visualization(
                 for class_name, meshes_info_list in reconstructed_meshes_data.items():
                     for mesh_info in meshes_info_list:
                         unposed_mesh_path = mesh_info.get('unposed_mesh_path')
+                        scale = np.array(mesh_info.get('scale', [1.0, 1.0, 1.0]))
                         rotation = np.array(mesh_info.get('rotation'))
                         translation = np.array(mesh_info.get('translation'))
 
                         if unposed_mesh_path and os.path.exists(unposed_mesh_path):
                             try:
-                                unposed_mesh = trimesh.load(unposed_mesh_path)
-                                transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation)
+                                unposed_mesh = read_trimesh(unposed_mesh_path)
+                                transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation, scale)
                                 open3d_mesh = trimesh_to_open3d(transformed_mesh)
 
                                 if frame_camera_translation and frame_camera_rotation:

@@ -193,8 +193,9 @@ else:
 
 glb_paths = []
 unposed_glb_paths = []
-rotation_matrices = []
-translation_vectors = []
+scales = []
+rotations = []
+translations = []
 
 for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64, chunk_masks_base64)):
     chunk_image = base64_to_image(chunk_image_b64)
@@ -235,15 +236,17 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
         unposed_mesh.export(unposed_save_path)
         unposed_glb_paths.append(unposed_save_path)
         
-        # Extract transforms (convert to Y-up)
-        # The output rotation and translation are in Z-up space, so we convert them to Y-up
-        rotation_quat = reconstruction_output["rotation"].cpu().numpy()
-        R_l2c = quaternion_to_matrix(torch.from_numpy(rotation_quat).unsqueeze(0)).squeeze(0).cpu().numpy()
-        # Convert rotation from Z-up to Y-up
-        R_l2c_yup = _R_ZUP_TO_YUP @ R_l2c @ _R_YUP_TO_ZUP
-        rotation_matrices.append(R_l2c_yup.tolist())
-        
-        # Extract translation and convert to Y-up
+        # Extract raw model transforms without coordinate adjustments
+        scale = reconstruction_output["scale"].detach().cpu().numpy().astype(np.float32).reshape(-1)
+        if scale.size != 3:
+            raise ValueError(f"Unexpected scale shape: {reconstruction_output['scale'].shape}")
+        scales.append(scale.tolist())
+
+        rotation = reconstruction_output["rotation"].detach().cpu().numpy().astype(np.float32).reshape(-1)
+        if rotation.size != 4:
+            raise ValueError(f"Unexpected rotation shape: {reconstruction_output['rotation'].shape}")
+        rotations.append(rotation.tolist())
+
         translation = reconstruction_output["translation"].detach().cpu().numpy().astype(np.float32)
         if translation.shape == (1, 3):
             translation = translation[0]
@@ -254,18 +257,16 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
 
         if translation.size != 3:
             raise ValueError(f"Unexpected translation shape: {reconstruction_output['translation'].shape}")
-
-        # Reorder coordinates from Z-up [x, z, -y] to Y-up [x, y, z]
-        translation_yup = np.array([translation[0], -translation[2], translation[1]], dtype=np.float32)
-        translation_vectors.append(translation_yup.tolist())
+        translations.append(translation.tolist())
     
     print(f"Saved mesh {idx+1}/{len(chunk_images_base64)} to {save_path}")
 
 output_data = {
     "glb_paths": glb_paths,
     "unposed_glb_paths": unposed_glb_paths,
-    "rotation_matrices": rotation_matrices,
-    "translation_vectors": translation_vectors,
+    "scales": scales,
+    "rotations": rotations,
+    "translations": translations,
 }
 
 save_inference_output(output_data)
