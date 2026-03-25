@@ -4,7 +4,7 @@ py360convert
 tqdm
 msgpack
 open3d
-opencv-python
+opencv-contrib-python
 torch
 torchvision
 trimesh
