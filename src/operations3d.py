@@ -105,18 +105,6 @@ def adjust_transforms_by_chunk_rotation(
     translation_vectors,
     chunk: ImageChunk,
 ):
-    """
-    Adjust rotation and translation matrices by chunk rotation.
-    
-    Args:
-        rotation_matrices: List of 3x3 rotation matrices
-        translation_vectors: List of 3D translation vectors
-        chunk: ImageChunk with angle information
-    
-    Returns:
-        adjusted_rotations: List of adjusted 3x3 rotation matrices
-        adjusted_translations: List of adjusted 3D translation vectors
-    """
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
 
     # horizontal angle rotates around Y-axis
@@ -284,18 +272,6 @@ def reconstruct_meshes_for_chunks(
     return meshes, unposed_meshes, scales, rotations, translations
 
 def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector, scale_vector=None):
-    """
-    Apply rotation and translation transforms to an unposed mesh.
-    
-    Args:
-        unposed_mesh: trimesh.Trimesh or trimesh.Scene object (unposed)
-        rotation_matrix: 3x3 numpy array (Y-up coordinate system)
-        translation_vector: 3D numpy array (Y-up coordinate system)
-        scale_vector: 3D scale vector
-    
-    Returns:
-        trimesh.Trimesh or trimesh.Scene object with transforms applied
-    """
     if not isinstance(unposed_mesh, (trimesh.Trimesh, trimesh.Scene)):
         raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(unposed_mesh)}")
 
@@ -305,23 +281,17 @@ def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector, sca
     
     transformed_mesh = unposed_mesh.copy()
     
-    # Create 4x4 transformation matrix
+    # create 4x4 transformation matrix
     transform_4x4 = np.eye(4, dtype=np.float32)
     scale_matrix = np.diag(normalized_scale)
     transform_4x4[:3, :3] = normalized_rotation @ scale_matrix
     transform_4x4[:3, 3] = normalized_translation
     
-    # Apply transformation to mesh or scene
     transformed_mesh.apply_transform(transform_4x4)
     
     return transformed_mesh
 
 def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector):
-    """
-    Frontend hook for SAM3D transform adjustment.
-    Convert SAM3D Z-up transforms into Y-up transforms, equivalent to
-    applying transforms in Z-up on a Y-up mesh and converting back.
-    """
     _R_ZUP_TO_YUP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float32)
     _R_YUP_TO_ZUP = _R_ZUP_TO_YUP.T
 
@@ -332,8 +302,6 @@ def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector
     else:
         rotation_matrix_zup = normalize_rotation_matrix(rotation)
 
-    # SAM3D inference applies transforms via PyTorch3D Transform3d (row-vector convention).
-    # Frontend mesh transforms use column-vector convention, so transpose rotation.
     rotation_matrix_zup = rotation_matrix_zup.T
 
     translation_zup = normalize_translation_vector(translation_vector)
@@ -341,7 +309,6 @@ def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector
     adjusted_rotation = _R_ZUP_TO_YUP @ rotation_matrix_zup @ _R_YUP_TO_ZUP
     adjusted_translation = _R_ZUP_TO_YUP @ translation_zup
 
-    # Optional facing correction in final Open3D (Y-up) space: mirror local Z axis.
     mirror_z_open3d = np.diag([1.0, 1.0, -1.0]).astype(np.float32)
     adjusted_rotation = adjusted_rotation @ mirror_z_open3d
 

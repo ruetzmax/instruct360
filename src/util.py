@@ -301,7 +301,7 @@ def trimesh_to_open3d(mesh):
 
     # convert into open3d space
     vertices = np.asarray(mesh.vertices) * [1, 1, -1]
-    faces = np.asarray(mesh.faces)
+    faces = np.asarray(mesh.faces)[:, [0, 2, 1]]
 
     o3d_mesh = open3d.geometry.TriangleMesh()
     o3d_mesh.vertices = open3d.utility.Vector3dVector(vertices)

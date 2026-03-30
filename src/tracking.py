@@ -4,10 +4,12 @@ import os
 from matplotlib import image
 import msgpack
 
-from src.operations2d import get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
-from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
-from src.util import read_video_frames, get_color_by_index, mesh_to_dict
+from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
+from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
+from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv
 from tqdm import tqdm
+import numpy as np
+import cv2
 
 def get_bounding_boxes_for_class(
     image,
@@ -222,4 +224,109 @@ def reconstruct_meshes_for_class(
         chunk_relative_scales_list,
         chunk_relative_rotations_list,
         chunk_relative_translations_list,
+    )
+
+def track_object_poses_for_mesh(
+        video_path,
+        class_name,
+        unposed_mesh_path,
+        initial_chunk_relative_scale,
+        initial_chunk_relative_rotation,
+        initial_chunk_relative_translation,
+        initial_world_rotation,
+        initial_world_translation,
+        initial_image_chunk_center,
+        initial_image_chunk_size
+    ):
+    tracked_chunk_relative_scales = [initial_chunk_relative_scale]
+    tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
+    tracked_chunk_relative_translations = [initial_chunk_relative_translation]
+    tracked_world_rotations = [initial_world_rotation]
+    tracked_world_translations = [initial_world_translation]
+    tracked_image_chunk_centers = [initial_image_chunk_center]
+    tracked_image_chunk_sizes = [initial_image_chunk_size]
+
+    frames = read_video_frames(video_path)
+    
+    # read and scale mesh
+    unposed_mesh = read_trimesh(unposed_mesh_path)
+    identity_rotation = np.eye(3, dtype=np.float32)
+    zero_translation = np.zeros(3, dtype=np.float32)
+    scaled_mesh = apply_mesh_transforms(unposed_mesh, identity_rotation, zero_translation, initial_chunk_relative_scale)
+    
+    # reconstruct initial chunk
+    initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
+    
+    previous_image_chunk = initial_image_chunk
+    previous_chunk_relative_rotation = initial_chunk_relative_rotation
+    previous_chunk_relative_translation = initial_chunk_relative_translation
+    for frame_idx in range(1, len(frames)):
+        print(f"Tracking mesh in frame {frame_idx}/{len(frames)-1}")
+        next_frame = frames[frame_idx]
+        
+        # get image chunk similar to the previous one
+        next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name)
+        image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
+        next_image_chunk = find_similar_image_chunk(previous_image_chunk, image_chunk_candidates)
+        
+        # if none can be found, use the previous one
+        if next_image_chunk is None:
+            next_image_chunk = previous_image_chunk.copy()
+        
+        K = get_intrinsics_for_chunk(next_image_chunk)
+        
+        # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
+        cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
+            scaled_mesh,
+            rotation_matrix=previous_chunk_relative_rotation,
+            translation_vector=previous_chunk_relative_translation,
+        )
+        cv_rotation, _ = cv2.Rodrigues(cv_rotation_mat)
+        
+        # perform a RAPID step to get the new rotation and translation
+        _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(
+            img=next_image_chunk.image,
+            num=30,
+            len=50,
+            pts3d=cv_vertices,
+            tris=cv_tris,
+            K=K,
+            rvec=cv_rotation,
+            tvec=cv_translation
+        )
+        
+        # convert back to the format used by the renderer
+        next_rotation_cv, _ = cv2.Rodrigues(cv_rotation_new)
+        next_translation_cv = cv_translation_new.reshape(3)
+        next_rotation_chunk, next_translation_chunk = opencv_to_trimesh_pose(
+            next_rotation_cv,
+            next_translation_cv,
+        )
+
+        # convert chunk-relative transforms to world-relative transforms
+        next_rotation_world, next_translation_world = adjust_transforms_by_chunk_rotation([next_rotation_chunk], [next_translation_chunk], next_image_chunk)
+        next_rotation_world = next_rotation_world[0]
+        next_translation_world = next_translation_world[0]
+        
+        # store results
+        tracked_chunk_relative_scales.append(initial_chunk_relative_scale)
+        tracked_chunk_relative_rotations.append(next_rotation_chunk)
+        tracked_chunk_relative_translations.append(next_translation_chunk)
+        tracked_world_rotations.append(next_rotation_world)
+        tracked_world_translations.append(next_translation_world)
+        tracked_image_chunk_centers.append(next_image_chunk.center)
+        tracked_image_chunk_sizes.append(initial_image_chunk_size)
+        
+        previous_image_chunk = next_image_chunk
+        previous_chunk_relative_rotation = next_rotation_chunk
+        previous_chunk_relative_translation = next_translation_chunk
+        
+    return (
+        tracked_chunk_relative_scales,
+        tracked_chunk_relative_rotations,
+        tracked_chunk_relative_translations,
+        tracked_world_rotations,
+        tracked_world_translations,
+        tracked_image_chunk_centers,
+        tracked_image_chunk_sizes,
     )

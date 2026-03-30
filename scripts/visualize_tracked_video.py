@@ -220,13 +220,10 @@ def do_visualization(
                                 transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation, scale)
                                 open3d_mesh = trimesh_to_open3d(transformed_mesh)
 
-                                if frame_camera_translation and frame_camera_rotation:
-                                    open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
-
                                 if class_name in class_colors:
                                     open3d_mesh.paint_uniform_color(class_colors[class_name])
 
-                                static_geometries.append(open3d_mesh)
+                                meshes_to_draw.append(open3d_mesh)
                             except Exception as e:
                                 print(f"Error loading mesh from {unposed_mesh_path}: {e}")
 
