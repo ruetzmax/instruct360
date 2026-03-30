@@ -17,6 +17,7 @@ from open3d.visualization import draw_geometries
 import plotly.graph_objects as go
 
 
+
 def normalize_rotation_matrix(rotation_matrix):
     rotation = np.asarray(rotation_matrix, dtype=np.float32)
     if rotation.shape == (3, 3):
@@ -259,13 +260,48 @@ def read_trimesh(mesh_or_path):
 
     return mesh
 
+
+_TRIMESH_TO_OPENCV_AXIS_MAP = np.array([
+    [-1.0, 0.0, 0.0],
+    [0.0, 0.0, -1.0],
+    [0.0, -1.0, 0.0],
+], dtype=np.float32)
+
+
+def trimesh_to_opencv(mesh_or_path, rotation_matrix, translation_vector):
+    mesh = read_trimesh(mesh_or_path)
+    vertices_src = np.asarray(mesh.vertices, dtype=np.float32)
+    faces = np.asarray(mesh.faces, dtype=np.int32)
+
+    mapping = _TRIMESH_TO_OPENCV_AXIS_MAP.copy()
+    vertices_cv = (vertices_src @ mapping.T).astype(np.float32)
+
+    rotation_src = normalize_rotation_matrix(rotation_matrix)
+    translation_src = normalize_translation_vector(translation_vector)
+
+    rotation_cv = (mapping @ rotation_src @ mapping.T).astype(np.float32)
+    translation_cv = (mapping @ translation_src).astype(np.float32).reshape(3, 1)
+
+    return vertices_cv, faces, rotation_cv, translation_cv
+
+
+def opencv_to_trimesh_pose(rotation_matrix_cv, translation_vector_cv):
+    mapping = _TRIMESH_TO_OPENCV_AXIS_MAP.copy()
+    rotation_cv = normalize_rotation_matrix(rotation_matrix_cv)
+    translation_cv = normalize_translation_vector(translation_vector_cv)
+
+    rotation_src = (mapping.T @ rotation_cv @ mapping).astype(np.float32)
+    translation_src = (mapping.T @ translation_cv).astype(np.float32)
+
+    return rotation_src, translation_src
+
+
 def trimesh_to_open3d(mesh):
     mesh = read_trimesh(mesh)
 
     # convert into open3d space
     vertices = np.asarray(mesh.vertices) * [1, 1, -1]
     faces = np.asarray(mesh.faces)
-
 
     o3d_mesh = open3d.geometry.TriangleMesh()
     o3d_mesh.vertices = open3d.utility.Vector3dVector(vertices)
