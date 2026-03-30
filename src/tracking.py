@@ -4,7 +4,7 @@ import os
 from matplotlib import image
 import msgpack
 
-from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
+from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted, find_closest_image_chunk
 from src.operations3d import estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv
 from tqdm import tqdm
@@ -261,18 +261,23 @@ def track_object_poses_for_mesh(
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
     previous_chunk_relative_translation = initial_chunk_relative_translation
+    next_contour_center = None
     for frame_idx in range(1, len(frames)):
         print(f"Tracking mesh in frame {frame_idx}/{len(frames)-1}")
         next_frame = frames[frame_idx]
         
-        # get image chunk similar to the previous one
-        next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name)
-        image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
-        next_image_chunk = find_similar_image_chunk(previous_image_chunk, image_chunk_candidates)
-        
-        # if none can be found, use the previous one
-        if next_image_chunk is None:
-            next_image_chunk = previous_image_chunk.copy()
+        # if the contour center is available, construct the next chunk from that
+        if next_contour_center is not None:
+            next_image_chunk = ImageChunk.from_image_point(next_frame, next_contour_center, initial_image_chunk_size)
+        else:
+            # otherwise, get image chunk similar to the previous one
+            next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name)
+            image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
+            next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
+            
+            # if none can be found, use the previous one
+            if next_image_chunk is None:
+                next_image_chunk = previous_image_chunk
         
         # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
         cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
@@ -281,6 +286,28 @@ def track_object_poses_for_mesh(
             translation_vector=previous_chunk_relative_translation,
         )
         cv_rotation, _ = cv2.Rodrigues(cv_rotation_mat)
+        
+        # extract contour to get the center of the next image chunk
+        contour_points_2d, contour_points_3d = cv2.rapid.extractControlPoints(
+            30,
+            50,
+            cv_vertices,
+            cv_rotation,
+            cv_translation,
+            K,
+            next_image_chunk.image.shape[:2],
+            cv_tris,
+        )
+        if contour_points_2d is None or contour_points_2d.size == 0:
+            # if contour cannot be extracted, next frame will fallback to bounding box detection
+            next_contour_center = None
+        else:
+            # otherwise, use contour center (in image coordinates) as the center of the next image chunk
+            contour_center_image = np.mean(contour_points_2d, axis=0)[0]
+            h, w = next_image_chunk.image.shape[:2]
+            offset_x = contour_center_image[0] / w - 0.5
+            offset_y = contour_center_image[1] / h - 0.5
+            next_contour_center = (next_image_chunk.center[0] + offset_x, next_image_chunk.center[1] + offset_y)
         
         # perform a RAPID step to get the new rotation and translation
         _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(

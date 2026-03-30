@@ -74,6 +74,18 @@ def find_similar_image_chunk(image_chunk: ImageChunk, candidate_chunks, threshol
             return candidate_chunk
     return None
 
+def find_closest_image_chunk(image_chunk: ImageChunk, candidate_chunks):
+    target_center = np.asarray(image_chunk.center, dtype=np.float32)
+    closest_chunk = None
+    closest_distance = float('inf')
+    for candidate_chunk in candidate_chunks:
+        candidate_center = np.asarray(candidate_chunk.center, dtype=np.float32)
+        distance = np.linalg.norm(candidate_center - target_center)
+        if distance < closest_distance:
+            closest_distance = distance
+            closest_chunk = candidate_chunk
+    return closest_chunk
+
 
 _dino_runner = None
 _ovseg_runner = None
