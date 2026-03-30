@@ -257,6 +257,9 @@ def track_object_poses_for_mesh(
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
     K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    # K = np.array([[395.27175903,   0.        , 350.        ],
+    #    [  0.        , 395.27175903, 350.        ],
+    #    [  0.        ,   0.        ,   1.        ]])
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
@@ -275,9 +278,9 @@ def track_object_poses_for_mesh(
             image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
             next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
             
-            # if none can be found, use the previous one
+            # if none can be found, use the previous chunk position
             if next_image_chunk is None:
-                next_image_chunk = previous_image_chunk
+                next_image_chunk = ImageChunk.from_image_point(next_frame, previous_image_chunk.center, initial_image_chunk_size)
         
         # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
         cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
