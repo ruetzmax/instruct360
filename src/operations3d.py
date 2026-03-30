@@ -7,6 +7,7 @@ from src.operations2d import ImageChunk
 from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
+import torch
 
 
 _ovmono_runner = None
@@ -41,6 +42,35 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
         [0.0, 0.0, 1.0]
     ])
     
+    return K
+
+#https://github.com/facebookresearch/sam-3d-objects/issues/144#issuecomment-3835610725
+def estimate_intrinsics_for_chunk(chunk: ImageChunk):
+    from moge.model.v1 import MoGeModel
+
+    image_tensor = (
+        torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
+    )
+    image_tensor = image_tensor.to("cpu")
+    
+    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to("cpu")
+    moge_model.eval()
+    with torch.no_grad():
+        moge_output = moge_model.infer(image_tensor)
+        
+    intrinsics = moge_output["intrinsics"].cpu().numpy()
+    
+    cx_norm, cy_norm = intrinsics[0, 2], intrinsics[1, 2]
+    fx_norm, fy_norm = intrinsics[0, 0], intrinsics[1, 1]
+
+    h, w, _ = chunk.image.shape
+    fx_abs = fx_norm * w
+    fy_abs = fy_norm * h
+    cx_abs = cx_norm * w
+    cy_abs = cy_norm * h
+    fx_abs = fy_abs
+
+    K = np.array([[fx_abs, 0.0, cx_abs], [0.0, fy_abs, cy_abs], [0.0, 0.0, 1.0]])
     return K
 
 

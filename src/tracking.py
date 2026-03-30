@@ -5,7 +5,7 @@ from matplotlib import image
 import msgpack
 
 from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted
-from src.operations3d import get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
+from src.operations3d import estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv
 from tqdm import tqdm
 import numpy as np
@@ -256,6 +256,7 @@ def track_object_poses_for_mesh(
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
+    K = estimate_intrinsics_for_chunk(initial_image_chunk)
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
@@ -272,8 +273,6 @@ def track_object_poses_for_mesh(
         # if none can be found, use the previous one
         if next_image_chunk is None:
             next_image_chunk = previous_image_chunk.copy()
-        
-        K = get_intrinsics_for_chunk(next_image_chunk)
         
         # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
         cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
