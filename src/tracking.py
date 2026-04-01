@@ -6,7 +6,7 @@ import msgpack
 
 from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted, find_closest_image_chunk
 from src.operations3d import estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
-from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv
+from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv, render_contour_with_correspondences
 from tqdm import tqdm
 import numpy as np
 import cv2
@@ -236,7 +236,8 @@ def track_object_poses_for_mesh(
         initial_world_rotation,
         initial_world_translation,
         initial_image_chunk_center,
-        initial_image_chunk_size
+        initial_image_chunk_size,
+        video_output_path=None,
     ):
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
@@ -256,15 +257,16 @@ def track_object_poses_for_mesh(
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
-    K = estimate_intrinsics_for_chunk(initial_image_chunk)
-    # K = np.array([[395.27175903,   0.        , 350.        ],
-    #    [  0.        , 395.27175903, 350.        ],
-    #    [  0.        ,   0.        ,   1.        ]])
+    # K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    K = np.array([[395.27175903,   0.        , 350.        ],
+       [  0.        , 395.27175903, 350.        ],
+       [  0.        ,   0.        ,   1.        ]])
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
     previous_chunk_relative_translation = initial_chunk_relative_translation
     next_contour_center = None
+    rendered_frames = [] if video_output_path else None
     for frame_idx in range(1, len(frames)):
         print(f"Tracking mesh in frame {frame_idx}/{len(frames)-1}")
         next_frame = frames[frame_idx]
@@ -349,6 +351,44 @@ def track_object_poses_for_mesh(
         previous_image_chunk = next_image_chunk
         previous_chunk_relative_rotation = next_rotation_chunk
         previous_chunk_relative_translation = next_translation_chunk
+        
+        # visualization
+        if video_output_path is not None:
+                try:
+                    bundle, src_locations = cv2.rapid.extractLineBundle(
+                        50,
+                        contour_points_2d,
+                        next_image_chunk.image,
+                    )
+                    
+                    cols, response = cv2.rapid.findCorrespondencies(
+                        bundle
+                    )
+                    correspondences_2d, correspondencies_3d = cv2.rapid.convertCorrespondencies(
+                        cols,
+                        src_locations
+                    )
+                except Exception:
+                    bundle = None
+                    src_locations = None
+                    
+                vis_img = render_contour_with_correspondences(
+                    next_image_chunk.image,
+                    contour_points_2d if contour_points_2d is not None else np.zeros((0,2)),
+                    correspondences_2d=correspondences_2d,
+                    center_2d=contour_center_image if (contour_points_2d is not None and contour_points_2d.size > 0) else None,
+                    bundle_src_locations=src_locations,
+                )
+                rendered_frames.append(vis_img)
+        
+    # write visualization video
+    if video_output_path is not None and rendered_frames:
+        h, w, _ = rendered_frames[0].shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(video_output_path, fourcc, 10, (w, h))
+        for frame in rendered_frames:
+            out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        out.release()
         
     return (
         tracked_chunk_relative_scales,

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.tracking import track_object_poses_for_mesh
 
 
-def track_object_poses(input_video_path, input_pkl_path, classes, output_pkl_path=None):
+def track_object_poses(input_video_path, input_pkl_path, classes, output_pkl_path=None, video_output_path=None):
 	with open(input_pkl_path, 'rb') as f:
 		frames_data = pickle.load(f)
 
@@ -64,6 +64,7 @@ def track_object_poses(input_video_path, input_pkl_path, classes, output_pkl_pat
 				initial_world_translation=mesh_data['translation'],
 				initial_image_chunk_center=mesh_data['image_chunk_center'],
 				initial_image_chunk_size=mesh_data['image_chunk_size'],
+				video_output_path=video_output_path,
 			)
 
 			tracked_results.append({
@@ -178,6 +179,11 @@ if __name__ == "__main__":
 		type=str,
 		help="Path to save the output pickle file with tracked object poses"
 	)
+	parser.add_argument(
+		"--video_output_path",
+		type=str,
+		help="Path to save the output video with contour/correspondence visualizations (mp4)"
+	)
 
 	args = parser.parse_args()
 
@@ -186,4 +192,5 @@ if __name__ == "__main__":
 		args.input_pkl,
 		args.classes,
 		args.output_pkl,
+		args.video_output_path,
 	)

@@ -194,7 +194,7 @@ def do_visualization(
             for mesh in frame_meshes:
                 meshes_to_draw.append(mesh)
                 
-        # add reconstructed meshes as static geometry
+        # add reconstructed meshes
         if show_reconstructed:
             reconstructed_meshes_data = {}
             frame_classes_for_meshes = frame_data.get('classes', [])
@@ -219,10 +219,10 @@ def do_visualization(
                                 unposed_mesh = read_trimesh(unposed_mesh_path)
                                 transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation, scale)
                                 open3d_mesh = trimesh_to_open3d(transformed_mesh)
-
-                                if class_name in class_colors:
-                                    open3d_mesh.paint_uniform_color(class_colors[class_name])
-
+                                
+                                if frame_camera_translation and frame_camera_rotation:
+                                    open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
+                
                                 meshes_to_draw.append(open3d_mesh)
                             except Exception as e:
                                 print(f"Error loading mesh from {unposed_mesh_path}: {e}")

@@ -341,4 +341,23 @@ def trimesh_to_open3d(mesh):
 
     o3d_mesh.compute_vertex_normals()
     return o3d_mesh
+
+def render_contour_with_correspondences(image, contour_points_2d, correspondences_2d=None, center_2d=None, bundle_src_locations=None):
+    overlay = image.copy()
+    contour = contour_points_2d.reshape(-1, 2).astype(np.int32)
+    cv.polylines(overlay, [contour], isClosed=True, color=(255, 0, 0), thickness=2)
+    for pt in contour:
+        cv.circle(overlay, tuple(pt), 2, (0, 255, 255), -1)
+    if center_2d is not None:
+        cv.circle(overlay, tuple(np.asarray(center_2d, dtype=int)), 5, (0, 0, 255), -1)
+    if bundle_src_locations is not None:
+        overlay = cv.rapid.drawSearchLines(
+            overlay,
+            bundle_src_locations,
+            (255, 0, 255)
+        )
+    if correspondences_2d is not None:
+        for pt in correspondences_2d.reshape(-1, 2).astype(np.int32):
+            cv.circle(overlay, tuple(pt), 2, (0, 255, 255), -1)
+    return overlay
     
