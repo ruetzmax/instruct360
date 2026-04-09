@@ -272,6 +272,8 @@ def track_object_poses_for_mesh(
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
     previous_chunk_relative_translation = initial_chunk_relative_translation
+    previous_world_rotation = initial_world_rotation
+    previous_world_translation = initial_world_translation
     next_contour_center = None
     rendered_frames = [] if video_output_path else None
     for frame_idx in range(1, len(frames)):
@@ -321,8 +323,8 @@ def track_object_poses_for_mesh(
         # for every other frame, adjust the previous transforms by the change in camera pose and chunk position between frames for more accurate projection
         else:
             previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_by_chunk_rotation(
-                [previous_chunk_relative_rotation],
-                [previous_chunk_relative_translation],
+                [previous_world_rotation],
+                [previous_world_translation],
                 next_image_chunk,
                 invert=True
                 )
@@ -439,6 +441,8 @@ def track_object_poses_for_mesh(
         previous_image_chunk = next_image_chunk
         previous_chunk_relative_rotation = next_rotation_chunk
         previous_chunk_relative_translation = next_translation_chunk
+        previous_world_rotation = next_rotation_world
+        previous_world_translation = next_translation_world
         
         # visualization
         if video_output_path is not None:
