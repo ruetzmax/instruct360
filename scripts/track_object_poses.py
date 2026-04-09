@@ -26,6 +26,9 @@ def track_object_poses(
 	if not isinstance(frames_data, list) or len(frames_data) == 0:
 		raise ValueError("Input pickle must contain a non-empty list of frame data")
 
+	frame_camera_translations = [frame["camera_translation"] for frame in frames_data]
+	frame_camera_rotations = [frame["camera_rotation"] for frame in frames_data]
+
 	first_frame_data = frames_data[0]
 	first_frame_classes = first_frame_data.get('classes', [])
 	class_filter = set(classes)
@@ -75,6 +78,8 @@ def track_object_poses(
 				initial_world_translation=mesh_data['translation'],
 				initial_image_chunk_center=mesh_data['image_chunk_center'],
 				initial_image_chunk_size=mesh_data['image_chunk_size'],
+				frame_camera_translations=frame_camera_translations,
+				frame_camera_rotations=frame_camera_rotations,
 				video_output_path=video_output_path,
 				num_contour_points=num_contour_points,
 				search_line_length=search_line_length,

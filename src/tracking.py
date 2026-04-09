@@ -5,7 +5,7 @@ from matplotlib import image
 import msgpack
 
 from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted, find_closest_image_chunk
-from src.operations3d import estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
+from src.operations3d import adjust_transforms_between_cameras, estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv, render_contour_with_correspondences
 from tqdm import tqdm
 import numpy as np
@@ -237,6 +237,8 @@ def track_object_poses_for_mesh(
         initial_world_translation,
         initial_image_chunk_center,
         initial_image_chunk_size,
+        frame_camera_translations,
+        frame_camera_rotations,
         video_output_path=None,
         num_contour_points=100,
         search_line_length=10,
@@ -304,6 +306,20 @@ def track_object_poses_for_mesh(
                     )
                     rendered_frames.append(vis_img)
                 continue
+            
+        # adjust the previous transforms by the change in camera pose between frames for more accurate projection
+        previous_frame_translation = frame_camera_translations[frame_idx - 1]
+        previous_frame_rotation = frame_camera_rotations[frame_idx - 1]
+        next_frame_translation = frame_camera_translations[frame_idx]
+        next_frame_rotation = frame_camera_rotations[frame_idx]
+        previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_between_cameras(
+            [previous_chunk_relative_rotation],
+            [previous_chunk_relative_translation],
+            next_frame_translation,
+            next_frame_rotation,
+            previous_frame_translation,
+            previous_frame_rotation
+        )
         
         # if we are on the first frame, perform tracking on only the object mask for better alignment
         if frame_idx == 1:

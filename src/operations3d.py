@@ -134,8 +134,13 @@ def adjust_transforms_by_chunk_rotation(
     rotation_matrices,
     translation_vectors,
     chunk: ImageChunk,
+    invert: bool = False
 ):
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
+
+    if invert:
+        angle_horizontal_rad = -angle_horizontal_rad
+        angle_vertical_rad = -angle_vertical_rad
 
     # horizontal angle rotates around Y-axis
     rotation_yaw = np.array([
@@ -167,6 +172,42 @@ def adjust_transforms_by_chunk_rotation(
         adjusted_translations.append(adjusted_translation)
     
     return adjusted_rotations, adjusted_translations
+
+def adjust_transforms_between_cameras(
+        rotation_matrices,
+        translation_vectors,
+        cam1_translation,
+        cam1_rotation,
+        cam2_translation,
+        cam2_rotation,
+):
+        # camera poses in world frame
+        R_w_c1 = open3d.geometry.get_rotation_matrix_from_quaternion(cam1_rotation)
+        R_w_c2 = open3d.geometry.get_rotation_matrix_from_quaternion(cam2_rotation)
+        t_w_c1 = normalize_translation_vector(cam1_translation)
+        t_w_c2 = normalize_translation_vector(cam2_translation)
+
+        R_c2_w = R_w_c2.T
+
+        adjusted_rotations = []
+        adjusted_translations = []
+
+        for rotation_matrix, translation_vector in zip(rotation_matrices, translation_vectors):
+                R_c1_o = normalize_rotation_matrix(rotation_matrix)
+                t_c1_o = normalize_translation_vector(translation_vector)
+
+                # object pose in world frame
+                R_w_o = R_w_c1 @ R_c1_o
+                t_w_o = R_w_c1 @ t_c1_o + t_w_c1
+
+                # object pose in camera 2 frame
+                R_c2_o = R_c2_w @ R_w_o
+                t_c2_o = R_c2_w @ (t_w_o - t_w_c2)
+
+                adjusted_rotations.append(R_c2_o)
+                adjusted_translations.append(t_c2_o)
+
+        return adjusted_rotations, adjusted_translations
 
 
 def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
