@@ -16,7 +16,9 @@ def track_object_poses(
 	video_output_path=None,
 	mode="RAPID",
 	num_contour_points=100,
-	search_line_length=30,
+	search_line_length=10,
+	initial_search_line_length=30,
+	use_gpu=False
 ):
 	with open(input_pkl_path, 'rb') as f:
 		frames_data = pickle.load(f)
@@ -76,7 +78,9 @@ def track_object_poses(
 				video_output_path=video_output_path,
 				num_contour_points=num_contour_points,
 				search_line_length=search_line_length,
+				initial_seach_line_length=initial_search_line_length,
 				mode=mode,
+				use_gpu=use_gpu
 			)
 
 			tracked_results.append({
@@ -211,8 +215,20 @@ if __name__ == "__main__":
 	parser.add_argument(
 		"--search_line_length",
 		type=int,
-		default=30,
-		help="Search line length (default: 30)"
+		default=10,
+		help="Search line length (default: 10)"
+	)
+	parser.add_argument(
+			"--initial_search_line_length",
+			type=int,
+			default=30,
+			help="Initial search line length (default: 30)"
+		)
+	parser.add_argument(
+		"--use_gpu",
+		type=bool,
+		default=False,
+		help="Enable or disable GPU"
 	)
 
 	args = parser.parse_args()
@@ -226,4 +242,6 @@ if __name__ == "__main__":
 		mode=args.mode,
 		num_contour_points=args.num_contour_points,
 		search_line_length=args.search_line_length,
+		initial_search_line_length=args.initial_search_line_length,
+		use_gpu=args.use_gpu
 	)

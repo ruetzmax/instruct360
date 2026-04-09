@@ -239,8 +239,10 @@ def track_object_poses_for_mesh(
         initial_image_chunk_size,
         video_output_path=None,
         num_contour_points=100,
-        search_line_length=30,
-        mode="RAPID"
+        search_line_length=10,
+        initial_seach_line_length=30,
+        mode="RAPID",
+        use_gpu=False,
     ):
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
@@ -273,13 +275,14 @@ def track_object_poses_for_mesh(
     for frame_idx in range(1, len(frames)):
         print(f"Tracking mesh in frame {frame_idx}/{len(frames)-1}")
         next_frame = frames[frame_idx]
+        effective_search_line_length = search_line_length
         
         # if the contour center is available, construct the next chunk from that
         if next_contour_center is not None:
             next_image_chunk = ImageChunk.from_image_point(next_frame, next_contour_center, initial_image_chunk_size)
         else:
             # otherwise, look for the object in the whole frame and get most similar image chunk
-            next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name)
+            next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
             image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
             next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
             
@@ -302,6 +305,17 @@ def track_object_poses_for_mesh(
                     rendered_frames.append(vis_img)
                 continue
         
+        # if we are on the first frame, perform tracking on only the object mask for better alignment
+        if frame_idx == 1:
+            mask = get_masks_from_image_chunks([next_image_chunk], prompt=class_name, use_gpu=use_gpu)[0]
+            rgb = mask[..., :3].copy()
+            alpha = mask[..., 3]
+            rgb[alpha == 0] = 255
+            mask = rgb
+            
+            next_image_chunk.image = mask
+            effective_search_line_length = initial_seach_line_length
+                    
         # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
         cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
             scaled_mesh,
@@ -336,7 +350,7 @@ def track_object_poses_for_mesh(
             _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(
                 img=next_image_chunk.image,
                 num=num_contour_points,
-                len=search_line_length,
+                len=effective_search_line_length,
                 pts3d=cv_vertices,
                 tris=cv_tris,
                 K=K,
@@ -353,7 +367,7 @@ def track_object_poses_for_mesh(
             _, cv_rotation_new, cv_translation_new= gost.compute(
                 img=next_image_chunk.image,
                 num=num_contour_points,
-                len=search_line_length,
+                len=effective_search_line_length,
                 K=K,
                 rvec=cv_rotation,
                 tvec=cv_translation
@@ -368,7 +382,7 @@ def track_object_poses_for_mesh(
             _, cv_rotation_new, cv_translation_new= olst.compute(
                 img=next_image_chunk.image,
                 num=num_contour_points,
-                len=search_line_length,
+                len=effective_search_line_length,
                 K=K,
                 rvec=cv_rotation,
                 tvec=cv_translation
@@ -406,7 +420,7 @@ def track_object_poses_for_mesh(
         if video_output_path is not None:
                 try:
                     bundle, src_locations = cv2.rapid.extractLineBundle(
-                        search_line_length,
+                        effective_search_line_length,
                         contour_points_2d,
                         next_image_chunk.image,
                     )
