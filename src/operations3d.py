@@ -152,8 +152,8 @@ def adjust_transforms_by_chunk_rotation(
     # vertical angle rotates around X-axis
     rotation_pitch = np.array([
         [1, 0, 0],
-        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
-        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
+        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
+        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
     ])
     
     chunk_rotation = rotation_pitch @ rotation_yaw

@@ -307,19 +307,6 @@ def track_object_poses_for_mesh(
                     rendered_frames.append(vis_img)
                 continue
             
-        # adjust the previous transforms by the change in camera pose between frames for more accurate projection
-        previous_frame_translation = frame_camera_translations[frame_idx - 1]
-        previous_frame_rotation = frame_camera_rotations[frame_idx - 1]
-        next_frame_translation = frame_camera_translations[frame_idx]
-        next_frame_rotation = frame_camera_rotations[frame_idx]
-        previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_between_cameras(
-            [previous_chunk_relative_rotation],
-            [previous_chunk_relative_translation],
-            next_frame_translation,
-            next_frame_rotation,
-            previous_frame_translation,
-            previous_frame_rotation
-        )
         
         # if we are on the first frame, perform tracking on only the object mask for better alignment
         if frame_idx == 1:
@@ -331,6 +318,27 @@ def track_object_poses_for_mesh(
             
             next_image_chunk.image = mask
             effective_search_line_length = initial_seach_line_length
+        # for every other frame, adjust the previous transforms by the change in camera pose and chunk position between frames for more accurate projection
+        else:
+            previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_by_chunk_rotation(
+                [previous_chunk_relative_rotation],
+                [previous_chunk_relative_translation],
+                next_image_chunk,
+                invert=True
+                )
+
+            previous_frame_translation = frame_camera_translations[frame_idx - 1]
+            previous_frame_rotation = frame_camera_rotations[frame_idx - 1]
+            next_frame_translation = frame_camera_translations[frame_idx]
+            next_frame_rotation = frame_camera_rotations[frame_idx]
+            previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_between_cameras(
+                [previous_chunk_relative_rotation],
+                [previous_chunk_relative_translation],
+                next_frame_translation,
+                next_frame_rotation,
+                previous_frame_translation,
+                previous_frame_rotation
+            )
                     
         # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
         cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
