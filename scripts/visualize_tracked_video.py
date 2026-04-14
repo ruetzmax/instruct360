@@ -223,11 +223,6 @@ def do_visualization(
                                 if frame_camera_translation and frame_camera_rotation:
                                     open3d_mesh = adjust_pose_by_camera_pose(open3d_mesh, frame_camera_translation, frame_camera_rotation)
 
-                                # rotate, because for what ever reason the meshes after the first frame are displaced
-                                if frame_idx > 0:
-                                    rot_90_x = open3d.geometry.get_rotation_matrix_from_axis_angle([np.pi / 2, 0.0, 0.0])
-                                    open3d_mesh.rotate(rot_90_x, center=[0.0, 0.0, 0.0])
-
                                 meshes_to_draw.append(open3d_mesh)
                             except Exception as e:
                                 print(f"Error loading mesh from {unposed_mesh_path}: {e}")

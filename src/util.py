@@ -189,10 +189,10 @@ def dict_to_mesh(mesh_dict):
     
 def _mesh_to_plotly(mesh):
     # transpose z and y axes and flip y to match Open3D coords
-    vertices = np.asarray(mesh.vertices)
-    vertices = vertices[:, [0, 2, 1]] * [1, -1, 1]
-
+    mesh.vertices = open3d.utility.Vector3dVector(np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, 1])
+    
     triangles = np.asarray(mesh.triangles)
+    vertices = np.asarray(mesh.vertices)
     colors = np.asarray(mesh.vertex_colors)
     
     plotly_mesh = go.Mesh3d(
@@ -215,8 +215,7 @@ def render_scene(meshes):
             scene=dict(
                 xaxis=dict(visible=False),
                 yaxis=dict(visible=False),
-                zaxis=dict(visible=False),
-                aspectmode="data"
+                zaxis=dict(visible=False)
             )
         )
     )
@@ -263,7 +262,7 @@ def read_trimesh(mesh_or_path):
 
 
 _TRIMESH_TO_OPENCV_AXIS_MAP = np.array([
-    [-1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
     [0.0, 0.0, -1.0],
     [0.0, -1.0, 0.0],
 ], dtype=np.float32)
@@ -341,6 +340,10 @@ def trimesh_to_open3d(mesh):
         o3d_mesh.vertex_colors = open3d.utility.Vector3dVector(vertex_colors)
 
     o3d_mesh.compute_vertex_normals()
+    
+    rot_90_x = open3d.geometry.get_rotation_matrix_from_axis_angle([np.pi / 2, 0.0, 0.0])
+    o3d_mesh.rotate(rot_90_x, center=[0.0, 0.0, 0.0])
+                                    
     return o3d_mesh
 
 def render_contour_with_correspondences(image, contour_points_2d, correspondences_2d=None, center_2d=None, bundle_src_locations=None):
