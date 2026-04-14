@@ -4,6 +4,7 @@ import os
 from matplotlib import image
 import msgpack
 
+from src.filters import init_kalman, do_kalman_step
 from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted, find_closest_image_chunk
 from src.operations3d import adjust_transforms_between_cameras, estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv, render_contour_with_correspondences
@@ -245,6 +246,7 @@ def track_object_poses_for_mesh(
         initial_seach_line_length=30,
         mode="RAPID",
         use_gpu=False,
+        use_kalman=True,
     ):
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
@@ -268,6 +270,10 @@ def track_object_poses_for_mesh(
     K = np.array([[395.27175903,   0.        , 350.        ],
        [  0.        , 395.27175903, 350.        ],
        [  0.        ,   0.        ,   1.        ]])
+    
+    if use_kalman:
+        FPS = 24
+        kf = init_kalman(1.0 / FPS)
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
@@ -428,6 +434,10 @@ def track_object_poses_for_mesh(
         next_rotation_world, next_translation_world = adjust_transforms_by_chunk_rotation([next_rotation_chunk], [next_translation_chunk], next_image_chunk)
         next_rotation_world = next_rotation_world[0]
         next_translation_world = next_translation_world[0]
+        
+        #apply kalman filter to world transforms
+        if use_kalman:
+            next_rotation_world, next_translation_world = do_kalman_step(kf, next_rotation_world, next_translation_world)
         
         # store results
         tracked_chunk_relative_scales.append(initial_chunk_relative_scale)
