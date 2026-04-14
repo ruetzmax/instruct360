@@ -189,10 +189,10 @@ def dict_to_mesh(mesh_dict):
     
 def _mesh_to_plotly(mesh):
     # transpose z and y axes and flip y to match Open3D coords
-    mesh.vertices = open3d.utility.Vector3dVector(np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, 1])
-    
-    triangles = np.asarray(mesh.triangles)
     vertices = np.asarray(mesh.vertices)
+    vertices = vertices[:, [0, 2, 1]] * [1, -1, 1]
+
+    triangles = np.asarray(mesh.triangles)
     colors = np.asarray(mesh.vertex_colors)
     
     plotly_mesh = go.Mesh3d(
@@ -215,7 +215,8 @@ def render_scene(meshes):
             scene=dict(
                 xaxis=dict(visible=False),
                 yaxis=dict(visible=False),
-                zaxis=dict(visible=False)
+                zaxis=dict(visible=False),
+                aspectmode="data"
             )
         )
     )
@@ -267,7 +268,7 @@ _TRIMESH_TO_OPENCV_AXIS_MAP = np.array([
     [0.0, -1.0, 0.0],
 ], dtype=np.float32)
 
-
+# convert GLTF system (x left, y up, z forward) to OpenCV system (x right, y down, z forward)
 def trimesh_to_opencv(mesh_or_path, rotation_matrix, translation_vector):
     mesh = read_trimesh(mesh_or_path)
     vertices_src = np.asarray(mesh.vertices, dtype=np.float32)

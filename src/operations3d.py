@@ -362,6 +362,7 @@ def apply_mesh_transforms(unposed_mesh, rotation_matrix, translation_vector, sca
     
     return transformed_mesh
 
+# converts transforms from sam3d coordinate system (RH z-up) to GLTF system (x left, y up, z forward)
 def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector):
     _R_ZUP_TO_YUP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float32)
     _R_YUP_TO_ZUP = _R_ZUP_TO_YUP.T
@@ -369,18 +370,63 @@ def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector
     scale = normalize_scale_vector(scale_vector)
     rotation = np.asarray(rotation_input, dtype=np.float32)
     if rotation.reshape(-1).size == 4:
+        # rotation is a quaternion (w, x, y, z) in z-up coordinates
         rotation_matrix_zup = open3d.geometry.get_rotation_matrix_from_quaternion(rotation.reshape(-1).tolist())
     else:
+        # rotation is already a 3x3 matrix in z-up coordinates
         rotation_matrix_zup = normalize_rotation_matrix(rotation)
-
-    rotation_matrix_zup = rotation_matrix_zup.T
 
     translation_zup = normalize_translation_vector(translation_vector)
 
+    # Convert z-up transforms into GLTF/trimesh (y-up) coordinates
     adjusted_rotation = _R_ZUP_TO_YUP @ rotation_matrix_zup @ _R_YUP_TO_ZUP
     adjusted_translation = _R_ZUP_TO_YUP @ translation_zup
 
-    mirror_z_open3d = np.diag([1.0, 1.0, -1.0]).astype(np.float32)
-    adjusted_rotation = adjusted_rotation @ mirror_z_open3d
-
     return scale, adjusted_rotation, adjusted_translation
+
+def pose_trimesh_with_sam3d_transform(mesh, rotation_input, translation_vector, scale_vector=None):
+
+    # Load mesh and ensure we have a Trimesh instance
+    base_mesh = read_trimesh(mesh)
+    if not isinstance(base_mesh, trimesh.Trimesh):
+        raise TypeError(f"Expected trimesh.Trimesh, got {type(base_mesh)}")
+
+    # Axis conversion matrices between Z-up and Y-up
+    _R_ZUP_TO_YUP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float32)
+    _R_YUP_TO_ZUP = _R_ZUP_TO_YUP.T
+
+    # Convert mesh vertices from Y-up to Z-up
+    vertices_yup = np.asarray(base_mesh.vertices, dtype=np.float32)
+    vertices_zup = vertices_yup @ _R_YUP_TO_ZUP
+
+    # Normalize transform inputs (Z-up space)
+    if rotation_input is None:
+        rotation_zup = np.eye(3, dtype=np.float32)
+    else:
+        rotation = np.asarray(rotation_input, dtype=np.float32)
+        flat = rotation.reshape(-1)
+        if flat.size == 4:
+            # Quaternion (w, x, y, z)
+            rotation_zup = open3d.geometry.get_rotation_matrix_from_quaternion(flat.tolist())
+        else:
+            rotation_zup = normalize_rotation_matrix(rotation)
+
+    translation_zup = normalize_translation_vector(translation_vector)
+
+    if scale_vector is None:
+        scale = np.ones(3, dtype=np.float32)
+    else:
+        scale = normalize_scale_vector(scale_vector)
+
+    # Apply scale, then rotation, then translation in Z-up
+    vertices_zup_scaled = vertices_zup * scale[None, :]
+    vertices_zup_rot = (rotation_zup @ vertices_zup_scaled.T).T
+    vertices_zup_posed = vertices_zup_rot + translation_zup[None, :]
+
+    # Convert posed vertices back to Y-up
+    vertices_yup_posed = vertices_zup_posed @ _R_ZUP_TO_YUP
+
+    posed_mesh = base_mesh.copy()
+    posed_mesh.vertices = vertices_yup_posed.astype(np.float32)
+
+    return posed_mesh
