@@ -138,10 +138,6 @@ def adjust_transforms_by_chunk_rotation(
 ):
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
 
-    if invert:
-        angle_horizontal_rad = -angle_horizontal_rad
-        angle_vertical_rad = -angle_vertical_rad
-
     # horizontal angle rotates around Y-axis
     rotation_yaw = np.array([
         [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
@@ -157,6 +153,9 @@ def adjust_transforms_by_chunk_rotation(
     ])
     
     chunk_rotation = rotation_pitch @ rotation_yaw
+
+    if invert:
+        chunk_rotation = chunk_rotation.T
     
     adjusted_rotations = []
     adjusted_translations = []
