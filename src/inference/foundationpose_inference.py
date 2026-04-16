@@ -16,33 +16,55 @@ if foundationpose_root not in sys.path:
 
 import estimater as fp  # type: ignore[reportMissingImports]
 import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
+import Utils as fp_utils  # type: ignore[reportMissingImports]
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
 
 _original_compute_crop_window_tf_batch = predict_pose_refine.compute_crop_window_tf_batch
+_original_utils_compute_crop_window_tf_batch = fp_utils.compute_crop_window_tf_batch
 
 
 def _compute_crop_window_tf_batch_float32(*args, **kwargs):
+    args = list(args)
+
     poses = kwargs.get("poses")
     K = kwargs.get("K")
 
+    if poses is None and len(args) > 3:
+        poses = args[3]
+    if K is None and len(args) > 4:
+        K = args[4]
+
     if poses is not None:
         if torch.is_tensor(poses):
-            kwargs["poses"] = poses.to(dtype=torch.float32)
+            poses = poses.to(dtype=torch.float32)
         else:
-            kwargs["poses"] = np.asarray(poses, dtype=np.float32)
+            poses = np.asarray(poses, dtype=np.float32)
 
     if K is not None:
         if torch.is_tensor(K):
-            kwargs["K"] = K.to(dtype=torch.float32)
+            K = K.to(dtype=torch.float32)
         else:
-            kwargs["K"] = np.asarray(K, dtype=np.float32)
+            K = np.asarray(K, dtype=np.float32)
 
+    if "poses" in kwargs:
+        kwargs["poses"] = poses
+    elif len(args) > 3:
+        args[3] = poses
+
+    if "K" in kwargs:
+        kwargs["K"] = K
+    elif len(args) > 4:
+        args[4] = K
+
+    if _original_compute_crop_window_tf_batch is _original_utils_compute_crop_window_tf_batch:
+        return _original_compute_crop_window_tf_batch(*args, **kwargs)
     return _original_compute_crop_window_tf_batch(*args, **kwargs)
 
 
 predict_pose_refine.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
+fp_utils.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
 
 
 def _coerce_mesh_dtypes(mesh):
