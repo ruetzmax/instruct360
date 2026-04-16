@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import torch
 import trimesh
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,8 +15,34 @@ if foundationpose_root not in sys.path:
     sys.path.insert(0, foundationpose_root)
 
 import estimater as fp  # type: ignore[reportMissingImports]
+import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
+
+
+_original_compute_crop_window_tf_batch = predict_pose_refine.compute_crop_window_tf_batch
+
+
+def _compute_crop_window_tf_batch_float32(*args, **kwargs):
+    poses = kwargs.get("poses")
+    K = kwargs.get("K")
+
+    if poses is not None:
+        if torch.is_tensor(poses):
+            kwargs["poses"] = poses.to(dtype=torch.float32)
+        else:
+            kwargs["poses"] = np.asarray(poses, dtype=np.float32)
+
+    if K is not None:
+        if torch.is_tensor(K):
+            kwargs["K"] = K.to(dtype=torch.float32)
+        else:
+            kwargs["K"] = np.asarray(K, dtype=np.float32)
+
+    return _original_compute_crop_window_tf_batch(*args, **kwargs)
+
+
+predict_pose_refine.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
 
 
 def _coerce_mesh_dtypes(mesh):
@@ -47,7 +74,7 @@ def _make_foundationpose_mesh_compatible(mesh):
 
             mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh, vertex_colors=vertex_colors)
 
-            return _coerce_mesh_dtypes(mesh)
+    return _coerce_mesh_dtypes(mesh)
 
 
 def read_trimesh(mesh_or_path):
