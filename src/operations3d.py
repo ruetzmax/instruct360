@@ -9,6 +9,7 @@ from src.util import normalize_rotation_matrix, normalize_translation_vector, no
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
+from transformers import pipeline
 
 
 _ovmono_runner = None
@@ -35,21 +36,6 @@ def _get_foundationpose_runner(env_name="instruct360"):
     if _foundationpose_runner is None:
         _foundationpose_runner = CondaInferenceRunner(env_name, "foundationpose_inference.py")
     return _foundationpose_runner
-
-
-def _run_moge_inference(chunk: ImageChunk, device: str = "cpu"):
-    from moge.model.v1 import MoGeModel  # type: ignore[reportMissingImports]
-
-    image_tensor = (
-        torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
-    ).to(device)
-
-    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to(device)
-    moge_model.eval()
-    with torch.no_grad():
-        moge_output = moge_model.infer(image_tensor)
-
-    return moge_output
         
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):
@@ -70,7 +56,16 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
 
 #https://github.com/facebookresearch/sam-3d-objects/issues/144#issuecomment-3835610725
 def estimate_intrinsics_for_chunk(chunk: ImageChunk):
-    moge_output = _run_moge_inference(chunk, device="cpu")
+    from moge.model.v1 import MoGeModel  # type: ignore[reportMissingImports]
+
+    image_tensor = (
+        torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
+    ).to("cpu")
+
+    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to("cpu")
+    moge_model.eval()
+    with torch.no_grad():
+        moge_output = moge_model.infer(image_tensor)
         
     intrinsics = moge_output["intrinsics"].cpu().numpy()
     
@@ -92,14 +87,13 @@ def estimate_pose_for_image_chunk(
     chunk: ImageChunk,
     unposed_mesh_path,
     class_name,
+    K,
     is_first_frame,
     foundationpose_env="foundationpose",
 ):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    moge_output = _run_moge_inference(chunk, device=device)
 
-    intrinsics = moge_output["intrinsics"].detach().cpu().numpy().astype(np.float32)
-    depth = moge_output["depth"]
+    depth_pipeline = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf")
+    depth = depth_pipeline(chunk.image)["depth"]
 
     if torch.is_tensor(depth):
         depth = depth.detach().cpu().numpy()
@@ -124,7 +118,7 @@ def estimate_pose_for_image_chunk(
         "depth_npy_path": depth_npy_path,
         "mask_base64": mask_base64,
         "unposed_mesh_path": str(unposed_mesh_path),
-        "intrinsics": intrinsics.tolist(),
+        "intrinsics": K.tolist(),
     }
     try:
         output_data = runner.run(input_data)
