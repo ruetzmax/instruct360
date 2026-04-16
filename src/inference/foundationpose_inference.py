@@ -22,17 +22,9 @@ def _make_foundationpose_mesh_compatible(mesh):
     if isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals):
         material = getattr(mesh.visual, "material", None)
         texture_image = getattr(material, "image", None) if material is not None else None
+        image_is_usable = texture_image is not None and hasattr(texture_image, "convert")
 
-        if texture_image is None and material is not None:
-            base_color_texture = getattr(material, "baseColorTexture", None)
-            if base_color_texture is not None:
-                try:
-                    setattr(material, "image", base_color_texture)
-                    texture_image = getattr(material, "image", None)
-                except Exception:
-                    texture_image = None
-
-        if texture_image is None:
+        if not image_is_usable:
             vertex_colors = getattr(mesh.visual, "vertex_colors", None)
             if vertex_colors is None or len(vertex_colors) != len(mesh.vertices):
                 vertex_colors = np.tile(
