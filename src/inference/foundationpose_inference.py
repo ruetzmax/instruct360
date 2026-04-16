@@ -14,9 +14,32 @@ if foundationpose_root not in sys.path:
     sys.path.insert(0, foundationpose_root)
 
 import estimater as fp  # type: ignore[reportMissingImports]
-from src.util import read_trimesh
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
+
+
+def read_trimesh(mesh_or_path):
+    if isinstance(mesh_or_path, (str, os.PathLike)):
+        mesh = trimesh.load(mesh_or_path)
+    else:
+        mesh = mesh_or_path
+
+    if isinstance(mesh, trimesh.Scene):
+        sub_meshes = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
+        if not sub_meshes:
+            raise ValueError("GLB scene does not contain any mesh geometry")
+
+        textured = [
+            g for g in sub_meshes
+            if getattr(getattr(g.visual, "material", None), "image", None) is not None
+            or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
+        ]
+        return textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+
+    if not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(mesh)}")
+
+    return mesh
 
 
 fp.set_logging_format()
