@@ -16,6 +16,9 @@ _ovmono_runner = None
 _sam3d_runner = None
 _foundationpose_runner = None
 
+moge_model = None
+da_model = None
+
 
 def _get_ovmono_runner(env_name="ovmono3d"):
     global _ovmono_runner
@@ -56,13 +59,17 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
 
 #https://github.com/facebookresearch/sam-3d-objects/issues/144#issuecomment-3835610725
 def estimate_intrinsics_for_chunk(chunk: ImageChunk):
+    global moge_model
+    
     from moge.model.v1 import MoGeModel  # type: ignore[reportMissingImports]
 
     image_tensor = (
         torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
     ).to("cpu")
 
-    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to("cpu")
+    if moge_model is None:
+        moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to("cpu")
+        
     moge_model.eval()
     with torch.no_grad():
         moge_output = moge_model.infer(image_tensor)
@@ -91,9 +98,12 @@ def estimate_pose_for_image_chunk(
     is_first_frame,
     foundationpose_env="foundationpose",
 ):
+    global da_model
 
-    depth_pipeline = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf")
-    depth = depth_pipeline(chunk.image)["depth"]
+    if da_model is None:
+        da_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf")
+        
+    depth = da_model(chunk.image)["depth"]
 
     if torch.is_tensor(depth):
         depth = depth.detach().cpu().numpy()
