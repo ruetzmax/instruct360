@@ -18,6 +18,13 @@ import estimater as fp  # type: ignore[reportMissingImports]
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
 
+def _coerce_mesh_dtypes(mesh):
+    mesh.vertices = np.asarray(mesh.vertices, dtype=np.float32)
+    mesh.faces = np.asarray(mesh.faces, dtype=np.int32)
+    _ = mesh.vertex_normals
+    return mesh
+
+
 def _make_foundationpose_mesh_compatible(mesh):
     if isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals):
         material = getattr(mesh.visual, "material", None)
@@ -40,7 +47,7 @@ def _make_foundationpose_mesh_compatible(mesh):
 
             mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh, vertex_colors=vertex_colors)
 
-    return mesh
+            return _coerce_mesh_dtypes(mesh)
 
 
 def read_trimesh(mesh_or_path):
