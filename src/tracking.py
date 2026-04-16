@@ -6,7 +6,7 @@ import msgpack
 
 from src.filters import init_kalman, do_kalman_step
 from src.operations2d import ImageChunk, find_similar_image_chunk, get_2d_bounding_boxes, bounding_boxes_to_image_chunks, get_masks_from_image_chunks, image_chunk_from_undistorted, find_closest_image_chunk
-from src.operations3d import adjust_transforms_between_cameras, estimate_intrinsics_for_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
+from src.operations3d import adjust_transforms_between_cameras, estimate_intrinsics_for_chunk, estimate_pose_for_image_chunk, get_3d_bounding_boxes, adjust_bounding_boxes_by_chunk_rotation, get_box_meshes, get_intrinsics_for_chunk, reconstruct_meshes_for_chunks, adjust_transforms_by_chunk_rotation, apply_mesh_transforms, sam3d_transforms_to_trimesh
 from src.util import opencv_to_trimesh_pose, read_trimesh, read_video_frames, get_color_by_index, mesh_to_dict, trimesh_to_opencv, render_contour_with_correspondences
 from tqdm import tqdm
 import numpy as np
@@ -280,6 +280,8 @@ def track_object_poses_for_mesh(
     if use_kalman:
         FPS = 24
         kf = init_kalman(1.0 / FPS)
+        
+    do_cv_tracking = mode in ["RAPID", "GOS", "OLS"]
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
@@ -321,9 +323,8 @@ def track_object_poses_for_mesh(
                     rendered_frames.append(vis_img)
                 continue
             
-        
         # if we are on the first frame, perform tracking on only the object mask for better alignment
-        if frame_idx == 1:
+        if frame_idx == 1 and do_cv_tracking:
             mask = get_masks_from_image_chunks([next_image_chunk], prompt=class_name, use_gpu=use_gpu)[0]
             rgb = mask[..., :3].copy()
             alpha = mask[..., 3]
@@ -383,58 +384,68 @@ def track_object_poses_for_mesh(
         offset_y = contour_center_image[1] / h - 0.5
         next_contour_center = (next_image_chunk.center[0] + offset_x, next_image_chunk.center[1] + offset_y)
         
-        # perform a tracking step to get the new rotation and translation
-        if mode == "RAPID":
-            _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(
-                img=next_image_chunk.image,
-                num=num_contour_points,
-                len=effective_search_line_length,
-                pts3d=cv_vertices,
-                tris=cv_tris,
-                K=K,
-                rvec=cv_rotation,
-                tvec=cv_translation
-            )
-        elif mode == "GOS":
-            gost = cv2.rapid.GOSTracker.create(
-                pts3d=cv_vertices,
-                tris=cv_tris,
-                histBins=4,
-                sobelThesh=10
-            )
-            _, cv_rotation_new, cv_translation_new= gost.compute(
-                img=next_image_chunk.image,
-                num=num_contour_points,
-                len=effective_search_line_length,
-                K=K,
-                rvec=cv_rotation,
-                tvec=cv_translation
-            )
-        elif mode == "OLS":
-            olst = cv2.rapid.OLSTracker.create(
-                pts3d=cv_vertices,
-                tris=cv_tris,
-                histBins=8,
-                sobelThesh=10
-            )
-            _, cv_rotation_new, cv_translation_new= olst.compute(
-                img=next_image_chunk.image,
-                num=num_contour_points,
-                len=effective_search_line_length,
-                K=K,
-                rvec=cv_rotation,
-                tvec=cv_translation
-            )
+        if do_cv_tracking:
+            # perform a tracking step to get the new rotation and translation
+            if mode == "RAPID":
+                _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(
+                    img=next_image_chunk.image,
+                    num=num_contour_points,
+                    len=effective_search_line_length,
+                    pts3d=cv_vertices,
+                    tris=cv_tris,
+                    K=K,
+                    rvec=cv_rotation,
+                    tvec=cv_translation
+                )
+            elif mode == "GOS":
+                gost = cv2.rapid.GOSTracker.create(
+                    pts3d=cv_vertices,
+                    tris=cv_tris,
+                    histBins=4,
+                    sobelThesh=10
+                )
+                _, cv_rotation_new, cv_translation_new= gost.compute(
+                    img=next_image_chunk.image,
+                    num=num_contour_points,
+                    len=effective_search_line_length,
+                    K=K,
+                    rvec=cv_rotation,
+                    tvec=cv_translation
+                )
+            elif mode == "OLS":
+                olst = cv2.rapid.OLSTracker.create(
+                    pts3d=cv_vertices,
+                    tris=cv_tris,
+                    histBins=8,
+                    sobelThesh=10
+                )
+                _, cv_rotation_new, cv_translation_new= olst.compute(
+                    img=next_image_chunk.image,
+                    num=num_contour_points,
+                    len=effective_search_line_length,
+                    K=K,
+                    rvec=cv_rotation,
+                    tvec=cv_translation
+                )
+                
+            #TODO: add termination criterion, in case the object is not visible in frame
             
-        #TODO: add termination criterion, in case the object is not visible in frame
-        
-        # convert back to the format used by the renderer
-        next_rotation_cv, _ = cv2.Rodrigues(cv_rotation_new)
-        next_translation_cv = cv_translation_new.reshape(3)
-        next_rotation_chunk, next_translation_chunk = opencv_to_trimesh_pose(
-            next_rotation_cv,
-            next_translation_cv,
-        )
+            # convert back to the format used by the renderer
+            next_rotation_cv, _ = cv2.Rodrigues(cv_rotation_new)
+            next_translation_cv = cv_translation_new.reshape(3)
+            next_rotation_chunk, next_translation_chunk = opencv_to_trimesh_pose(
+                next_rotation_cv,
+                next_translation_cv,
+            )
+        else:
+            # do pose estimation using FoundationPose model
+            next_rotation_chunk, next_translation_chunk = estimate_pose_for_image_chunk(
+                chunk=next_image_chunk,
+                unposed_mesh_path=unposed_mesh_path,
+                class_name=class_name,
+                K=K,
+                is_first_frame=True
+            )
 
         # convert chunk-relative transforms to world-relative transforms
         next_rotation_world, next_translation_world = adjust_transforms_by_chunk_rotation([next_rotation_chunk], [next_translation_chunk], next_image_chunk)
