@@ -108,6 +108,10 @@ refiner = fp.PoseRefinePredictor()
 glctx = fp.dr.RasterizeCudaContext()
 est = fp.FoundationPose(model_pts=mesh.vertices, model_normals=mesh.vertex_normals, mesh=mesh, scorer=scorer, refiner=refiner, debug_dir=debug_dir, debug=debug, glctx=glctx)
 
+if hasattr(est, "mesh") and est.mesh is not None:
+    est.mesh.vertices = np.asarray(est.mesh.vertices, dtype=np.float32)
+    _ = est.mesh.vertex_normals
+
 if mask is None:
     mask = depth > 0.0
 else:
