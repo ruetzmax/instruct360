@@ -3,7 +3,6 @@ import sys
 import site
 
 import numpy as np
-import torch
 import trimesh
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,12 +25,26 @@ def _augment_ld_library_path_for_torch_cuda():
         candidate_dirs.extend([
             os.path.join(site_dir, "torch", "lib"),
             os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib64"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "cuda_runtime", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "lib64"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "cudnn", "lib"),
+            os.path.join(site_dir, "nvidia", "cudnn", "lib64"),
+            os.path.join(site_dir, "nvidia", "cudnn", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "cublas", "lib"),
+            os.path.join(site_dir, "nvidia", "cublas", "lib64"),
+            os.path.join(site_dir, "nvidia", "cublas", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "cusolver", "lib"),
+            os.path.join(site_dir, "nvidia", "cusolver", "lib64"),
+            os.path.join(site_dir, "nvidia", "cusolver", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "curand", "lib"),
+            os.path.join(site_dir, "nvidia", "curand", "lib64"),
+            os.path.join(site_dir, "nvidia", "curand", "targets", "x86_64-linux", "lib"),
             os.path.join(site_dir, "nvidia", "cufft", "lib"),
+            os.path.join(site_dir, "nvidia", "cufft", "lib64"),
+            os.path.join(site_dir, "nvidia", "cufft", "targets", "x86_64-linux", "lib"),
         ])
 
     existing = os.environ.get("LD_LIBRARY_PATH", "")
@@ -47,6 +60,8 @@ def _augment_ld_library_path_for_torch_cuda():
 
 
 _augment_ld_library_path_for_torch_cuda()
+
+import torch
 
 import estimater as fp  # type: ignore[reportMissingImports]
 import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
