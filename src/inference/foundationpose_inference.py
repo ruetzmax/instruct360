@@ -18,6 +18,39 @@ import estimater as fp  # type: ignore[reportMissingImports]
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
 
+def _make_foundationpose_mesh_compatible(mesh):
+    if isinstance(mesh.visual, trimesh.visual.texture.TextureVisuals):
+        material = getattr(mesh.visual, "material", None)
+        texture_image = getattr(material, "image", None) if material is not None else None
+
+        if texture_image is None and material is not None:
+            base_color_texture = getattr(material, "baseColorTexture", None)
+            if base_color_texture is not None:
+                try:
+                    setattr(material, "image", base_color_texture)
+                    texture_image = getattr(material, "image", None)
+                except Exception:
+                    texture_image = None
+
+        if texture_image is None:
+            vertex_colors = getattr(mesh.visual, "vertex_colors", None)
+            if vertex_colors is None or len(vertex_colors) != len(mesh.vertices):
+                vertex_colors = np.tile(
+                    np.array([128, 128, 128, 255], dtype=np.uint8),
+                    (len(mesh.vertices), 1),
+                )
+            else:
+                vertex_colors = np.asarray(vertex_colors)
+                if vertex_colors.ndim == 2 and vertex_colors.shape[1] == 3:
+                    alpha_channel = np.full((len(vertex_colors), 1), 255, dtype=vertex_colors.dtype)
+                    vertex_colors = np.concatenate([vertex_colors, alpha_channel], axis=1)
+                vertex_colors = vertex_colors.astype(np.uint8)
+
+            mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh, vertex_colors=vertex_colors)
+
+    return mesh
+
+
 def read_trimesh(mesh_or_path):
     if isinstance(mesh_or_path, (str, os.PathLike)):
         mesh = trimesh.load(mesh_or_path)
@@ -34,12 +67,13 @@ def read_trimesh(mesh_or_path):
             if getattr(getattr(g.visual, "material", None), "image", None) is not None
             or getattr(getattr(g.visual, "material", None), "baseColorTexture", None) is not None
         ]
-        return textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+        selected_mesh = textured[0] if textured else max(sub_meshes, key=lambda g: len(g.faces))
+        return _make_foundationpose_mesh_compatible(selected_mesh)
 
     if not isinstance(mesh, trimesh.Trimesh):
         raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(mesh)}")
 
-    return mesh
+    return _make_foundationpose_mesh_compatible(mesh)
 
 
 fp.set_logging_format()
