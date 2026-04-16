@@ -10,6 +10,7 @@ from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
 from transformers import pipeline
+from PIL import Image
 
 
 _ovmono_runner = None
@@ -102,8 +103,9 @@ def estimate_pose_for_image_chunk(
 
     if da_model is None:
         da_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf")
-        
-    depth = da_model(chunk.image)["depth"]
+
+    input_image = Image.fromarray(np.asarray(chunk.image, dtype=np.uint8))
+    depth = da_model(input_image)["depth"]
 
     if torch.is_tensor(depth):
         depth = depth.detach().cpu().numpy()
