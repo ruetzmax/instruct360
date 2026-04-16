@@ -65,6 +65,7 @@ import torch
 
 import estimater as fp  # type: ignore[reportMissingImports]
 import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
+import learning.training.predict_score as predict_score  # type: ignore[reportMissingImports]
 import Utils as fp_utils  # type: ignore[reportMissingImports]
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
@@ -130,6 +131,7 @@ def _compute_crop_window_tf_batch_float32(
 
 
 predict_pose_refine.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
+predict_score.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
 fp_utils.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
 
 
