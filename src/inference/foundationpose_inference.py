@@ -21,46 +21,63 @@ import Utils as fp_utils  # type: ignore[reportMissingImports]
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
 
-_original_compute_crop_window_tf_batch = predict_pose_refine.compute_crop_window_tf_batch
-_original_utils_compute_crop_window_tf_batch = fp_utils.compute_crop_window_tf_batch
+def _compute_crop_window_tf_batch_float32(
+    pts=None,
+    H=None,
+    W=None,
+    poses=None,
+    K=None,
+    crop_ratio=1.2,
+    out_size=None,
+    rgb=None,
+    uvs=None,
+    method='min_box',
+    mesh_diameter=None,
+):
+    if method != 'box_3d':
+        raise RuntimeError("Only method='box_3d' is supported in this patched path")
 
+    if poses is None or K is None or mesh_diameter is None or out_size is None:
+        raise ValueError("poses, K, mesh_diameter and out_size are required")
 
-def _compute_crop_window_tf_batch_float32(*args, **kwargs):
-    args = list(args)
+    if torch.is_tensor(poses):
+        poses_t = poses.to(dtype=torch.float32)
+        device = poses_t.device
+    else:
+        poses_t = torch.as_tensor(np.asarray(poses, dtype=np.float32), dtype=torch.float32, device='cuda')
+        device = poses_t.device
 
-    poses = kwargs.get("poses")
-    K = kwargs.get("K")
+    K_t = torch.as_tensor(np.asarray(K, dtype=np.float32), dtype=torch.float32, device=device)
 
-    if poses is None and len(args) > 3:
-        poses = args[3]
-    if K is None and len(args) > 4:
-        K = args[4]
+    B = len(poses_t)
+    radius = float(mesh_diameter) * float(crop_ratio) / 2.0
+    offsets = torch.tensor(
+        [0, 0, 0, radius, 0, 0, -radius, 0, 0, 0, radius, 0, 0, -radius, 0],
+        dtype=torch.float32,
+        device=device,
+    ).reshape(-1, 3)
 
-    if poses is not None:
-        if torch.is_tensor(poses):
-            poses = poses.to(dtype=torch.float32)
-        else:
-            poses = np.asarray(poses, dtype=np.float32)
+    pts_t = poses_t[:, :3, 3].reshape(-1, 1, 3) + offsets.reshape(1, -1, 3)
+    projected = (K_t @ pts_t.reshape(-1, 3).T).T
+    uvs_t = projected[:, :2] / projected[:, 2:3]
+    uvs_t = uvs_t.reshape(B, -1, 2)
+    center = uvs_t[:, 0]
+    radius_t = torch.abs(uvs_t - center.reshape(-1, 1, 2)).reshape(B, -1).max(axis=-1)[0].reshape(-1)
 
-    if K is not None:
-        if torch.is_tensor(K):
-            K = K.to(dtype=torch.float32)
-        else:
-            K = np.asarray(K, dtype=np.float32)
+    left = center[:, 0].round() - radius_t.round()
+    right = center[:, 0].round() + radius_t.round()
+    top = center[:, 1].round() - radius_t.round()
+    bottom = center[:, 1].round() + radius_t.round()
 
-    if "poses" in kwargs:
-        kwargs["poses"] = poses
-    elif len(args) > 3:
-        args[3] = poses
+    tf = torch.eye(3, dtype=torch.float32, device=device)[None].expand(B, -1, -1).contiguous()
+    tf[:, 0, 2] = -left
+    tf[:, 1, 2] = -top
 
-    if "K" in kwargs:
-        kwargs["K"] = K
-    elif len(args) > 4:
-        args[4] = K
+    new_tf = torch.eye(3, dtype=torch.float32, device=device)[None].expand(B, -1, -1).contiguous()
+    new_tf[:, 0, 0] = float(out_size[0]) / (right - left)
+    new_tf[:, 1, 1] = float(out_size[1]) / (bottom - top)
 
-    if _original_compute_crop_window_tf_batch is _original_utils_compute_crop_window_tf_batch:
-        return _original_compute_crop_window_tf_batch(*args, **kwargs)
-    return _original_compute_crop_window_tf_batch(*args, **kwargs)
+    return new_tf @ tf
 
 
 predict_pose_refine.compute_crop_window_tf_batch = _compute_crop_window_tf_batch_float32
