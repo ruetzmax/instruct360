@@ -1,9 +1,10 @@
 import os
 import numpy as np
+import tempfile
 
 import open3d
 import trimesh
-from src.operations2d import ImageChunk
+from src.operations2d import ImageChunk, get_masks_from_image_chunks
 from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh
 from src.inference.conda_inference import CondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
@@ -12,6 +13,7 @@ import torch
 
 _ovmono_runner = None
 _sam3d_runner = None
+_foundationpose_runner = None
 
 
 def _get_ovmono_runner(env_name="ovmono3d"):
@@ -26,6 +28,28 @@ def _get_sam3d_runner(env_name="sam3d-objects"):
     if _sam3d_runner is None:
         _sam3d_runner = CondaInferenceRunner(env_name, "sam3d_inference.py")
     return _sam3d_runner
+
+
+def _get_foundationpose_runner(env_name="instruct360"):
+    global _foundationpose_runner
+    if _foundationpose_runner is None:
+        _foundationpose_runner = CondaInferenceRunner(env_name, "foundationpose_inference.py")
+    return _foundationpose_runner
+
+
+def _run_moge_inference(chunk: ImageChunk, device: str = "cpu"):
+    from moge.model.v1 import MoGeModel  # type: ignore[reportMissingImports]
+
+    image_tensor = (
+        torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
+    ).to(device)
+
+    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to(device)
+    moge_model.eval()
+    with torch.no_grad():
+        moge_output = moge_model.infer(image_tensor)
+
+    return moge_output
         
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):
@@ -46,17 +70,7 @@ def get_intrinsics_for_chunk(chunk: ImageChunk):
 
 #https://github.com/facebookresearch/sam-3d-objects/issues/144#issuecomment-3835610725
 def estimate_intrinsics_for_chunk(chunk: ImageChunk):
-    from moge.model.v1 import MoGeModel
-
-    image_tensor = (
-        torch.from_numpy(np.array(chunk.image)).float().permute(2, 0, 1) / 255.0
-    )
-    image_tensor = image_tensor.to("cpu")
-    
-    moge_model = MoGeModel.from_pretrained("Ruicheng/moge-vitl").to("cpu")
-    moge_model.eval()
-    with torch.no_grad():
-        moge_output = moge_model.infer(image_tensor)
+    moge_output = _run_moge_inference(chunk, device="cpu")
         
     intrinsics = moge_output["intrinsics"].cpu().numpy()
     
@@ -72,6 +86,61 @@ def estimate_intrinsics_for_chunk(chunk: ImageChunk):
 
     K = np.array([[fx_abs, 0.0, cx_abs], [0.0, fy_abs, cy_abs], [0.0, 0.0, 1.0]])
     return K
+
+
+def estimate_pose_for_image_chunk(
+    chunk: ImageChunk,
+    unposed_mesh_path,
+    class_name,
+    is_first_frame,
+    foundationpose_env="foundationpose",
+):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    moge_output = _run_moge_inference(chunk, device=device)
+
+    intrinsics = moge_output["intrinsics"].detach().cpu().numpy().astype(np.float32)
+    depth = moge_output["depth"]
+
+    if torch.is_tensor(depth):
+        depth = depth.detach().cpu().numpy()
+    depth = np.asarray(depth, dtype=np.float32).squeeze()
+    if depth.ndim != 2:
+        raise ValueError(f"Expected 2D depth map from MoGe, got shape {depth.shape}")
+
+    os.makedirs("temp", exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
+        depth_npy_path = depth_file.name
+        np.save(depth_file, depth.astype(np.float32))
+
+    mask_base64 = None
+    if is_first_frame:
+        first_frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name)[0]
+        mask_base64 = image_to_base64(first_frame_mask)
+
+    runner = _get_foundationpose_runner(foundationpose_env)
+    input_data = {
+        "is_first_frame": is_first_frame,
+        "rgb_base64": image_to_base64(chunk.image),
+        "depth_npy_path": depth_npy_path,
+        "mask_base64": mask_base64,
+        "unposed_mesh_path": str(unposed_mesh_path),
+        "intrinsics": intrinsics.tolist(),
+    }
+    try:
+        output_data = runner.run(input_data)
+    finally:
+        if os.path.exists(depth_npy_path):
+            os.remove(depth_npy_path)
+
+    pose = np.array(output_data["pose"], dtype=np.float32)
+    center_pose = np.array(output_data["center_pose"], dtype=np.float32)
+
+    estimated_rotation = pose[:3, :3]
+    estimated_translation = pose[:3, 3]
+    center_rotation = center_pose[:3, :3]
+    center_translation = center_pose[:3, 3]
+
+    return estimated_rotation, estimated_translation
 
 
 def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono3d"):
