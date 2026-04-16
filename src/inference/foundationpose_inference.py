@@ -1,5 +1,6 @@
 import os
 import sys
+import site
 
 import numpy as np
 import torch
@@ -13,6 +14,39 @@ if workspace_root not in sys.path:
 foundationpose_root = os.path.join(workspace_root, "FoundationPose")
 if foundationpose_root not in sys.path:
     sys.path.insert(0, foundationpose_root)
+
+
+def _augment_ld_library_path_for_torch_cuda():
+    candidate_dirs = [
+        os.path.join(sys.prefix, "lib"),
+        os.path.join(sys.prefix, "lib64"),
+    ]
+
+    for site_dir in site.getsitepackages():
+        candidate_dirs.extend([
+            os.path.join(site_dir, "torch", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "lib"),
+            os.path.join(site_dir, "nvidia", "cudnn", "lib"),
+            os.path.join(site_dir, "nvidia", "cublas", "lib"),
+            os.path.join(site_dir, "nvidia", "cusolver", "lib"),
+            os.path.join(site_dir, "nvidia", "curand", "lib"),
+            os.path.join(site_dir, "nvidia", "cufft", "lib"),
+        ])
+
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    existing_parts = [p for p in existing.split(":") if p]
+    merged = []
+
+    for path in candidate_dirs + existing_parts:
+        if path and os.path.isdir(path) and path not in merged:
+            merged.append(path)
+
+    if merged:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(merged)
+
+
+_augment_ld_library_path_for_torch_cuda()
 
 import estimater as fp  # type: ignore[reportMissingImports]
 import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
