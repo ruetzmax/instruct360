@@ -10,6 +10,7 @@ Reconstruct scene information from omnidirectional video input. Pipeline allows 
 <!-- 4. Install [cuda toolkit 11.3](https://developer.nvidia.com/cuda-11.3.0-download-archive) -->
 6. Install [ov-seg](https://github.com/facebookresearch/ov-seg) and place the pretrained weights inside the ov-seg/checkpoints folder
 7. Install [sam3d](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md) in a separate conda env "sam3d-objects" but clone it into the project root
+8. Install [FoundationPose](https://github.com/NVlabs/FoundationPose/tree/main?tab=readme-ov-file#env-setup-option-2-conda-experimental) inside of the root folder and inside a conda env called "foundationpose".
 
 OPTIONAL - for SLAM / camera postion tracking
 - Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
