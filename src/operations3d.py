@@ -108,7 +108,7 @@ def estimate_pose_for_image_chunk(
 
     mask_base64 = None
     if is_first_frame:
-        first_frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name)[0]
+        first_frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name, use_gpu=True)[0]
         mask_base64 = image_to_base64(first_frame_mask)
 
     runner = _get_foundationpose_runner(foundationpose_env)
