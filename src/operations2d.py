@@ -5,7 +5,7 @@ from typing import Tuple
 from PIL import Image
 from py360convert import e2p
 
-from src.inference.conda_inference import CondaInferenceRunner
+from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
 from src.inference.inference_utils import image_to_base64, base64_to_image
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -95,21 +95,21 @@ _sam3_runner = None
 def _get_dino_runner(env_name="grounding_dino"):
     global _dino_runner
     if _dino_runner is None:
-        _dino_runner = CondaInferenceRunner(env_name, "dino_inference.py")
+        _dino_runner = ThreadedCondaInferenceRunner(env_name, "dino_worker.py")
     return _dino_runner
 
 
 def _get_ovseg_runner(env_name="ovseg"):
     global _ovseg_runner
     if _ovseg_runner is None:
-        _ovseg_runner = CondaInferenceRunner(env_name, "ovseg_inference.py")
+        _ovseg_runner = ThreadedCondaInferenceRunner(env_name, "ovseg_worker.py")
     return _ovseg_runner
 
 
 def _get_sam3_runner(env_name="sam3d-objects"):
     global _sam3_runner
     if _sam3_runner is None:
-        _sam3_runner = CondaInferenceRunner(env_name, "sam3_inference.py")
+        _sam3_runner = ThreadedCondaInferenceRunner(env_name, "sam3_worker.py")
     return _sam3_runner
 
 # see: https://github.com/peterbraden/insv-to-yt, https://www.arj.no/2025/12/19/insta360-to-equirectangular/

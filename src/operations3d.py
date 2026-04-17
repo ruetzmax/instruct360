@@ -6,7 +6,7 @@ import open3d
 import trimesh
 from src.operations2d import ImageChunk, get_masks_from_image_chunks
 from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh
-from src.inference.conda_inference import CondaInferenceRunner
+from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
 from transformers import pipeline
@@ -31,14 +31,14 @@ def _get_ovmono_runner(env_name="ovmono3d"):
 def _get_sam3d_runner(env_name="sam3d-objects"):
     global _sam3d_runner
     if _sam3d_runner is None:
-        _sam3d_runner = CondaInferenceRunner(env_name, "sam3d_inference.py")
+        _sam3d_runner = ThreadedCondaInferenceRunner(env_name, "sam3d_worker.py")
     return _sam3d_runner
 
 
 def _get_foundationpose_runner(env_name="instruct360"):
     global _foundationpose_runner
     if _foundationpose_runner is None:
-        _foundationpose_runner = CondaInferenceRunner(env_name, "foundationpose_inference.py")
+        _foundationpose_runner = ThreadedCondaInferenceRunner(env_name, "foundationpose_worker.py")
     return _foundationpose_runner
         
 
