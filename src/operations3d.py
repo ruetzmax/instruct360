@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import tempfile
 
 import open3d
 import trimesh
@@ -8,6 +9,8 @@ from src.util import normalize_rotation_matrix, normalize_translation_vector, no
 from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
+from transformers import pipeline
+from PIL import Image
 
 
 _ovmono_runner = None
@@ -15,6 +18,8 @@ _sam3d_runner = None
 _foundationpose_runner = None
 
 moge_model = None
+da_model = None
+
 
 
 def _get_ovmono_runner(env_name="ovmono3d"):
@@ -37,6 +42,7 @@ def _get_foundationpose_runner(env_name="instruct360"):
         _foundationpose_runner = ThreadedCondaInferenceRunner(env_name, "foundationpose_worker.py")
     return _foundationpose_runner
         
+
 
 def get_intrinsics_for_chunk(chunk: ImageChunk):
     fov_x, fov_y = chunk.fov
@@ -95,6 +101,29 @@ def estimate_pose_for_image_chunk(
     is_first_frame,
     foundationpose_env="foundationpose",
 ):
+    global da_model
+    
+    if da_model is None:
+        da_model = pipeline(
+            task="depth-estimation",
+            model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
+            device=-1, #TODO: change to GPU for real inference
+        )
+
+    input_image = Image.fromarray(np.asarray(chunk.image, dtype=np.uint8))
+    depth = da_model(input_image)["depth"]
+
+    if torch.is_tensor(depth):
+        depth = depth.detach().cpu().numpy()
+    depth = np.asarray(depth, dtype=np.float32).squeeze()
+    if depth.ndim != 2:
+        raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
+
+    os.makedirs("temp", exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
+        depth_npy_path = depth_file.name
+        np.save(depth_file, depth.astype(np.float32))
+
     mask_base64 = None
     if is_first_frame:
         first_frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name, use_gpu=True)[0]
@@ -104,11 +133,16 @@ def estimate_pose_for_image_chunk(
     input_data = {
         "is_first_frame": is_first_frame,
         "rgb_base64": image_to_base64(chunk.image),
+        "depth_npy_path": depth_npy_path,
         "mask_base64": mask_base64,
         "unposed_mesh_path": str(unposed_mesh_path),
         "intrinsics": K.tolist(),
     }
-    output_data = runner.run(input_data)
+    try:
+        output_data = runner.run(input_data)
+    finally:
+        if os.path.exists(depth_npy_path):
+            os.remove(depth_npy_path)
 
     pose = np.array(output_data["pose"], dtype=np.float32)
     center_pose = np.array(output_data["center_pose"], dtype=np.float32)
