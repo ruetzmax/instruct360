@@ -115,7 +115,8 @@ def estimate_pose_for_image_chunk(
     da_input_data = {
         "image_base64": image_to_base64(chunk.image),
         "depth_npy_path": depth_npy_path,
-        "hf_device": -1,
+        "hf_device": 0,
+        "depth_units": "mm",
     }
     da_runner.run(da_input_data)
 

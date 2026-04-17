@@ -17,12 +17,15 @@ def main():
 
     image_base64 = input_data.get("image_base64")
     depth_npy_path = input_data.get("depth_npy_path")
-    hf_device = int(input_data.get("hf_device", -1))
+    hf_device = int(input_data.get("hf_device", 0))
+    depth_units = str(input_data.get("depth_units", "m")).strip().lower()
 
     if image_base64 is None:
         raise ValueError("Missing required field: image_base64")
     if depth_npy_path is None:
         raise ValueError("Missing required field: depth_npy_path")
+    if depth_units not in {"m", "mm"}:
+        raise ValueError("Invalid depth_units. Expected 'm' or 'mm'")
 
     model = pipeline(
         task="depth-estimation",
@@ -44,11 +47,15 @@ def main():
     if depth.ndim != 2:
         raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
 
+    if depth_units == "mm":
+        depth = depth * 1000.0
+
     np.save(depth_npy_path, depth.astype(np.float32))
 
     output_data = {
         "ok": True,
         "depth_npy_path": depth_npy_path,
+        "depth_units": depth_units,
     }
     save_inference_output(output_data)
 
