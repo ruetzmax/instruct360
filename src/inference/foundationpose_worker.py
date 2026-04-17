@@ -7,7 +7,6 @@ import traceback
 
 import numpy as np
 import trimesh
-from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -69,7 +68,6 @@ def _augment_ld_library_path_for_torch_cuda():
 _augment_ld_library_path_for_torch_cuda()
 
 import torch
-from transformers import pipeline
 
 import estimater as fp  # type: ignore[reportMissingImports]
 import learning.training.predict_pose_refine as predict_pose_refine  # type: ignore[reportMissingImports]
@@ -211,25 +209,6 @@ class FoundationPoseWorker:
         self.glctx = fp.dr.RasterizeCudaContext()
         print("[foundationpose_worker] FoundationPose networks loaded.", file=sys.stderr)
 
-        print("[foundationpose_worker] Loading depth model...", file=sys.stderr)
-        self.depth_estimator = pipeline(
-            task="depth-estimation",
-            model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
-        )
-        print("[foundationpose_worker] Depth model loaded.", file=sys.stderr)
-
-    def _estimate_depth(self, rgb):
-        input_image = Image.fromarray(np.asarray(rgb, dtype=np.uint8))
-        depth = self.depth_estimator(input_image)["depth"]
-
-        if torch.is_tensor(depth):
-            depth = depth.detach().cpu().numpy()
-
-        depth = np.asarray(depth, dtype=np.float32).squeeze()
-        if depth.ndim != 2:
-            raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
-        return depth
-
     def run_inference(self, input_data):
         is_first_frame = input_data.get("is_first_frame", False)
         rgb_base64 = input_data.get("rgb_base64")
@@ -242,10 +221,9 @@ class FoundationPoseWorker:
         os.makedirs(debug_dir, exist_ok=True)
 
         rgb = base64_to_image(rgb_base64)
-        if depth_npy_path:
-            depth = np.load(depth_npy_path).astype(np.float32)
-        else:
-            depth = self._estimate_depth(rgb)
+        if not depth_npy_path:
+            raise ValueError("depth_npy_path is required; depth estimation is not supported in foundationpose_worker")
+        depth = np.load(depth_npy_path).astype(np.float32)
         mask = base64_to_image(mask_base64) if mask_base64 is not None else None
         intrinsics = np.asarray(intrinsics, dtype=np.float32)
 
