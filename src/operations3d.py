@@ -9,16 +9,14 @@ from src.util import normalize_rotation_matrix, normalize_translation_vector, no
 from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
-from transformers import pipeline
-from PIL import Image
 
 
 _ovmono_runner = None
 _sam3d_runner = None
 _foundationpose_runner = None
+_da_runner = None
 
 moge_model = None
-da_model = None
 
 
 
@@ -41,6 +39,13 @@ def _get_foundationpose_runner(env_name="instruct360"):
     if _foundationpose_runner is None:
         _foundationpose_runner = ThreadedCondaInferenceRunner(env_name, "foundationpose_worker.py")
     return _foundationpose_runner
+
+
+def _get_da_runner(env_name="instruct360"):
+    global _da_runner
+    if _da_runner is None:
+        _da_runner = CondaInferenceRunner(env_name, "da_worker.py")
+    return _da_runner
         
 
 
@@ -100,29 +105,19 @@ def estimate_pose_for_image_chunk(
     K,
     is_first_frame,
     foundationpose_env="foundationpose",
+    da_env="instruct360",
 ):
-    global da_model
-    
-    if da_model is None:
-        da_model = pipeline(
-            task="depth-estimation",
-            model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
-            device=-1, #TODO: change to GPU for real inference
-        )
-
-    input_image = Image.fromarray(np.asarray(chunk.image, dtype=np.uint8))
-    depth = da_model(input_image)["depth"]
-
-    if torch.is_tensor(depth):
-        depth = depth.detach().cpu().numpy()
-    depth = np.asarray(depth, dtype=np.float32).squeeze()
-    if depth.ndim != 2:
-        raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
-
     os.makedirs("temp", exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
         depth_npy_path = depth_file.name
-        np.save(depth_file, depth.astype(np.float32))
+
+    da_runner = _get_da_runner(da_env)
+    da_input_data = {
+        "image_base64": image_to_base64(chunk.image),
+        "depth_npy_path": depth_npy_path,
+        "hf_device": -1,
+    }
+    da_runner.run(da_input_data)
 
     mask_base64 = None
     if is_first_frame:
