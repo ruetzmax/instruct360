@@ -29,7 +29,7 @@ def main():
 
     model = pipeline(
         task="depth-estimation",
-        model="depth-anything/Depth-Anything-V2-Metric-Indoor-Large-hf",
+        model="depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf",
         device=hf_device,
     )
 
