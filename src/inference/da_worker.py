@@ -61,6 +61,30 @@ from PIL import Image
 from transformers import pipeline
 
 
+def _summarize_depth(depth: np.ndarray) -> dict:
+    finite_mask = np.isfinite(depth)
+    if not np.any(finite_mask):
+        return {
+            "has_finite": False,
+        }
+
+    finite_depth = depth[finite_mask]
+    h, w = depth.shape
+    cy, cx = h // 2, w // 2
+    p05, p50, p95 = np.percentile(finite_depth, [5, 50, 95])
+    return {
+        "has_finite": True,
+        "shape": [int(h), int(w)],
+        "min": float(np.min(finite_depth)),
+        "max": float(np.max(finite_depth)),
+        "mean": float(np.mean(finite_depth)),
+        "p05": float(p05),
+        "p50": float(p50),
+        "p95": float(p95),
+        "center": float(depth[cy, cx]),
+    }
+
+
 def main():
     input_data = load_inference_input()
 
@@ -96,29 +120,25 @@ def main():
     if depth.ndim != 2:
         raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
 
-    # debug print
-    finite_mask = np.isfinite(depth)
-    if np.any(finite_mask):
-        finite_depth = depth[finite_mask]
-        h, w = depth.shape
-        cy, cx = h // 2, w // 2
-        p05, p50, p95 = np.percentile(finite_depth, [5, 50, 95])
+    if depth_units == "mm":
+        depth = depth * 1000.0
+
+    depth_debug = _summarize_depth(depth)
+
+    if depth_debug.get("has_finite"):
         print(
             (
                 f"[da_worker] depth units={depth_units} "
-                f"shape={depth.shape} "
-                f"min={float(np.min(finite_depth)):.4f} "
-                f"max={float(np.max(finite_depth)):.4f} "
-                f"mean={float(np.mean(finite_depth)):.4f} "
-                f"p05={float(p05):.4f} p50={float(p50):.4f} p95={float(p95):.4f} "
-                f"center={float(depth[cy, cx]):.4f}"
+                f"shape={tuple(depth_debug['shape'])} "
+                f"min={depth_debug['min']:.4f} "
+                f"max={depth_debug['max']:.4f} "
+                f"mean={depth_debug['mean']:.4f} "
+                f"p05={depth_debug['p05']:.4f} p50={depth_debug['p50']:.4f} p95={depth_debug['p95']:.4f} "
+                f"center={depth_debug['center']:.4f}"
             )
         )
     else:
         print(f"[da_worker] depth units={depth_units} no finite depth values")
-
-    if depth_units == "mm":
-        depth = depth * 1000.0
 
     
     np.save(depth_npy_path, depth.astype(np.float32))
@@ -127,6 +147,7 @@ def main():
         "ok": True,
         "depth_npy_path": depth_npy_path,
         "depth_units": depth_units,
+        "depth_debug": depth_debug,
     }
     save_inference_output(output_data)
 

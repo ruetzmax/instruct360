@@ -118,7 +118,23 @@ def estimate_pose_for_image_chunk(
         "hf_device": 0,
         "depth_units": "mm",
     }
-    da_runner.run(da_input_data)
+    da_output_data = da_runner.run(da_input_data)
+
+    depth_debug = da_output_data.get("depth_debug")
+    if isinstance(depth_debug, dict):
+        if depth_debug.get("has_finite"):
+            print(
+                "[depth] "
+                f"units={da_output_data.get('depth_units', 'm')} "
+                f"shape={tuple(depth_debug.get('shape', []))} "
+                f"min={depth_debug.get('min', 0.0):.4f} "
+                f"max={depth_debug.get('max', 0.0):.4f} "
+                f"mean={depth_debug.get('mean', 0.0):.4f} "
+                f"p50={depth_debug.get('p50', 0.0):.4f} "
+                f"center={depth_debug.get('center', 0.0):.4f}"
+            )
+        else:
+            print(f"[depth] units={da_output_data.get('depth_units', 'm')} no finite values")
 
     mask_base64 = None
     if is_first_frame:
