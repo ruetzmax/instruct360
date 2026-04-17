@@ -1,15 +1,64 @@
 import json
 import os
+import site
 import sys
 
 import numpy as np
-import torch
-from PIL import Image
-from transformers import pipeline
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
+
+
+def _augment_ld_library_path_for_torch_cuda():
+    candidate_dirs = [
+        os.path.join(sys.prefix, "lib"),
+        os.path.join(sys.prefix, "lib64"),
+    ]
+
+    for site_dir in site.getsitepackages():
+        candidate_dirs.extend([
+            os.path.join(site_dir, "torch", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib64"),
+            os.path.join(site_dir, "nvidia", "cuda_nvrtc", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "lib"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "lib64"),
+            os.path.join(site_dir, "nvidia", "cuda_runtime", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "cudnn", "lib"),
+            os.path.join(site_dir, "nvidia", "cudnn", "lib64"),
+            os.path.join(site_dir, "nvidia", "cudnn", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "cublas", "lib"),
+            os.path.join(site_dir, "nvidia", "cublas", "lib64"),
+            os.path.join(site_dir, "nvidia", "cublas", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "cusolver", "lib"),
+            os.path.join(site_dir, "nvidia", "cusolver", "lib64"),
+            os.path.join(site_dir, "nvidia", "cusolver", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "curand", "lib"),
+            os.path.join(site_dir, "nvidia", "curand", "lib64"),
+            os.path.join(site_dir, "nvidia", "curand", "targets", "x86_64-linux", "lib"),
+            os.path.join(site_dir, "nvidia", "cufft", "lib"),
+            os.path.join(site_dir, "nvidia", "cufft", "lib64"),
+            os.path.join(site_dir, "nvidia", "cufft", "targets", "x86_64-linux", "lib"),
+        ])
+
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    existing_parts = [p for p in existing.split(":") if p]
+    merged = []
+
+    for path in candidate_dirs + existing_parts:
+        if path and os.path.isdir(path) and path not in merged:
+            merged.append(path)
+
+    if merged:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(merged)
+
+
+_augment_ld_library_path_for_torch_cuda()
+
+import torch
+from PIL import Image
+from transformers import pipeline
 
 
 def main():
@@ -47,9 +96,31 @@ def main():
     if depth.ndim != 2:
         raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
 
+    # debug print
+    finite_mask = np.isfinite(depth)
+    if np.any(finite_mask):
+        finite_depth = depth[finite_mask]
+        h, w = depth.shape
+        cy, cx = h // 2, w // 2
+        p05, p50, p95 = np.percentile(finite_depth, [5, 50, 95])
+        print(
+            (
+                f"[da_worker] depth units={depth_units} "
+                f"shape={depth.shape} "
+                f"min={float(np.min(finite_depth)):.4f} "
+                f"max={float(np.max(finite_depth)):.4f} "
+                f"mean={float(np.mean(finite_depth)):.4f} "
+                f"p05={float(p05):.4f} p50={float(p50):.4f} p95={float(p95):.4f} "
+                f"center={float(depth[cy, cx]):.4f}"
+            )
+        )
+    else:
+        print(f"[da_worker] depth units={depth_units} no finite depth values")
+
     if depth_units == "mm":
         depth = depth * 1000.0
 
+    
     np.save(depth_npy_path, depth.astype(np.float32))
 
     output_data = {
