@@ -116,7 +116,7 @@ def estimate_pose_for_image_chunk(
         "image_base64": image_to_base64(chunk.image),
         "depth_npy_path": depth_npy_path,
         "hf_device": 0,
-        "depth_units": "mm",
+        "depth_units": "m",
     }
     da_output_data = da_runner.run(da_input_data)
 
@@ -164,7 +164,7 @@ def estimate_pose_for_image_chunk(
     center_rotation = center_pose[:3, :3]
     center_translation = center_pose[:3, 3]
 
-    return estimated_rotation, estimated_translation, center_rotation, center_translation
+    return estimated_rotation, estimated_translation
 
 
 def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono3d"):
