@@ -247,6 +247,7 @@ def track_object_poses_for_mesh(
         mode="RAPID",
         use_gpu=False,
         use_kalman=True,
+        sam3d_to_metric_scale_factor=0.3
     ):
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
@@ -263,13 +264,16 @@ def track_object_poses_for_mesh(
     identity_rotation = np.eye(3, dtype=np.float32)
     zero_translation = np.zeros(3, dtype=np.float32)
     scaled_mesh = apply_mesh_transforms(unposed_mesh, identity_rotation, zero_translation, initial_chunk_relative_scale)
+    scaled_mesh_path = 'temp/scaled.glb'
+    scaled_mesh.export(scaled_mesh_path)
+
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
-    # K = estimate_intrinsics_for_chunk(initial_image_chunk)
-    K = np.array([[395.27175903,   0.        , 350.        ],
-       [  0.        , 395.27175903, 350.        ],
-       [  0.        ,   0.        ,   1.        ]])
+    K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    # K = np.array([[395.27175903,   0.        , 350.        ],
+    #    [  0.        , 395.27175903, 350.        ],
+    #    [  0.        ,   0.        ,   1.        ]])
 
     # K = np.array([[348.59320068,   0.        , 350.        ],
     #    [  0.        , 348.59320068, 350.        ],
@@ -441,11 +445,25 @@ def track_object_poses_for_mesh(
             # do pose estimation using FoundationPose model
             next_rotation_chunk, next_translation_chunk = estimate_pose_for_image_chunk(
                 chunk=next_image_chunk,
-                unposed_mesh_path=unposed_mesh_path,
+                unposed_mesh_path=scaled_mesh_path,
                 class_name=class_name,
                 K=K,
-                is_first_frame=True
+                is_first_frame=True,
+                da_env="da"
             )
+
+            # sam3d and foundationpose object scales are not in same system, so there is a scale factor introduced
+            next_translation_chunk *= sam3d_to_metric_scale_factor
+
+            # rotate pose by -90 degrees around x
+            angle_x = np.deg2rad(90.0)
+            rot_x = np.array([
+                [1.0, 0.0, 0.0],
+                [0.0, np.cos(angle_x), -np.sin(angle_x)],
+                [0.0, np.sin(angle_x),  np.cos(angle_x)],
+            ])
+            next_rotation_chunk = rot_x @ next_rotation_chunk
+            next_translation_chunk = rot_x @ next_translation_chunk
 
         # convert chunk-relative transforms to world-relative transforms
         next_rotation_world, next_translation_world = adjust_transforms_by_chunk_rotation([next_rotation_chunk], [next_translation_chunk], next_image_chunk)
