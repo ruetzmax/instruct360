@@ -4,6 +4,7 @@ import os
 import site
 import sys
 import traceback
+import glob
 
 import numpy as np
 import trimesh
@@ -27,7 +28,31 @@ def _augment_ld_library_path_for_torch_cuda():
         os.path.join(sys.prefix, "lib64"),
     ]
 
-    for site_dir in site.getsitepackages():
+    site_dirs = []
+    try:
+        site_dirs.extend(site.getsitepackages())
+    except Exception:
+        pass
+
+    try:
+        user_site = site.getusersitepackages()
+        if isinstance(user_site, str):
+            site_dirs.append(user_site)
+        elif isinstance(user_site, (list, tuple)):
+            site_dirs.extend(user_site)
+    except Exception:
+        pass
+
+    for sys_path in sys.path:
+        if isinstance(sys_path, str) and "site-packages" in sys_path:
+            site_dirs.append(sys_path)
+
+    deduped_site_dirs = []
+    for site_dir in site_dirs:
+        if site_dir and site_dir not in deduped_site_dirs:
+            deduped_site_dirs.append(site_dir)
+
+    for site_dir in deduped_site_dirs:
         candidate_dirs.extend([
             os.path.join(site_dir, "torch", "lib"),
             os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib"),
@@ -52,6 +77,41 @@ def _augment_ld_library_path_for_torch_cuda():
             os.path.join(site_dir, "nvidia", "cufft", "lib64"),
             os.path.join(site_dir, "nvidia", "cufft", "targets", "x86_64-linux", "lib"),
         ])
+
+        nvidia_root = os.path.join(site_dir, "nvidia")
+        if os.path.isdir(nvidia_root):
+            for package_dir in os.listdir(nvidia_root):
+                package_root = os.path.join(nvidia_root, package_dir)
+                candidate_dirs.extend([
+                    os.path.join(package_root, "lib"),
+                    os.path.join(package_root, "lib64"),
+                    os.path.join(package_root, "targets", "x86_64-linux", "lib"),
+                ])
+
+    # Fallback for environments that ship only versioned NVRTC libraries (e.g. libnvrtc.so.12)
+    # but attempt to dlopen libnvrtc.so.
+    nvrtc_exists = False
+    nvrtc_versioned = []
+    for path in candidate_dirs:
+        if not path or not os.path.isdir(path):
+            continue
+        if os.path.exists(os.path.join(path, "libnvrtc.so")):
+            nvrtc_exists = True
+            break
+        nvrtc_versioned.extend(glob.glob(os.path.join(path, "libnvrtc.so.*")))
+
+    if not nvrtc_exists and nvrtc_versioned:
+        link_dir = os.path.join(workspace_root, "temp", "cuda_lib_links")
+        os.makedirs(link_dir, exist_ok=True)
+        target = sorted(nvrtc_versioned)[-1]
+        link_path = os.path.join(link_dir, "libnvrtc.so")
+        try:
+            if os.path.islink(link_path) or os.path.exists(link_path):
+                os.remove(link_path)
+            os.symlink(target, link_path)
+            candidate_dirs.insert(0, link_dir)
+        except Exception:
+            pass
 
     existing = os.environ.get("LD_LIBRARY_PATH", "")
     existing_parts = [p for p in existing.split(":") if p]
