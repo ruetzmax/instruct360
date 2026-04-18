@@ -111,7 +111,14 @@ def main():
         image = image[:, :, :3]
 
     input_image = Image.fromarray(np.asarray(image, dtype=np.uint8))
-    depth = model(input_image)["depth"]
+    model_output = model(input_image)
+    depth = model_output.get("predicted_depth")
+
+    if depth is None:
+        depth = model_output.get("depth")
+        if depth is None:
+            raise ValueError("Depth model output did not contain 'predicted_depth' or 'depth'")
+        print("[da_worker] WARNING: using visualization depth output; values may be 0-255 and non-metric")
 
     if torch.is_tensor(depth):
         depth = depth.detach().cpu().numpy()
@@ -120,8 +127,8 @@ def main():
     if depth.ndim != 2:
         raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
 
-    # if depth_units == "mm":
-    #     depth = depth * 1000.0
+    if depth_units == "mm":
+        depth = depth * 1000.0
 
     depth_debug = _summarize_depth(depth)
 
