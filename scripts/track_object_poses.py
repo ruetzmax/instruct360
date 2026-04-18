@@ -209,7 +209,7 @@ if __name__ == "__main__":
 		"--mode",
 		type=str,
 		default="RAPID",
-		help="Tracking mode to use: RAPID, OLS, GOS "
+		help="Tracking mode to use: RAPID, OLS, GOS, FP"
 	)
 	parser.add_argument(
 		"--num_contour_points",
