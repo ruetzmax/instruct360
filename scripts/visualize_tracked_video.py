@@ -90,6 +90,7 @@ def do_visualization(
     show_poses: bool = True,
     show_reconstructed: bool = True,
     show_bboxes: bool = True,
+    show_landmarks: bool = True,
 ):
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
@@ -240,6 +241,7 @@ def do_visualization(
             meshes_to_draw.append(placeholder)
             meshes_to_draw.append(axis)
 
+        if show_landmarks:
             global world_landmarks
             landmarks = frame_data.get('landmarks', [])
             world_landmarks.extend(landmarks)
@@ -348,6 +350,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable 3D bounding box visualization."
     )
+
+    parser.add_argument(
+        "--no_landmarks",
+        action="store_true",
+        help="Disable landmark point-cloud visualization."
+    )
     
     args = parser.parse_args()
     do_visualization(
@@ -356,4 +364,5 @@ if __name__ == "__main__":
         show_poses=not args.no_poses,
         show_reconstructed=not args.no_reconstructed,
         show_bboxes=not args.no_bboxes,
+        show_landmarks=not args.no_landmarks,
     )
