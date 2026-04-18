@@ -120,8 +120,8 @@ def main():
     if depth.ndim != 2:
         raise ValueError(f"Expected 2D depth map from depth model, got shape {depth.shape}")
 
-    if depth_units == "mm":
-        depth = depth * 1000.0
+    # if depth_units == "mm":
+    #     depth = depth * 1000.0
 
     depth_debug = _summarize_depth(depth)
 
