@@ -213,6 +213,7 @@ def render_scene(meshes):
         data=[*plotly_meshes],
         layout=dict(
             scene=dict(
+                aspectmode='data',
                 xaxis=dict(visible=False),
                 yaxis=dict(visible=False),
                 zaxis=dict(visible=False)
