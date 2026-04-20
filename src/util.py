@@ -62,6 +62,31 @@ def normalize_scale_vector(scale_vector):
     return flat
 
 
+def write_depth_image(depth_npy_path: str, output_path: str):
+    depth = np.load(depth_npy_path)
+    if depth.ndim == 3 and depth.shape[-1] == 1:
+        depth = depth[..., 0]
+
+    finite_mask = np.isfinite(depth)
+    if not np.any(finite_mask):
+        debug_image = np.zeros(depth.shape, dtype=np.uint8)
+    else:
+        min_depth = float(np.min(depth[finite_mask]))
+        max_depth = float(np.max(depth[finite_mask]))
+
+        if max_depth > min_depth:
+            normalized = np.zeros_like(depth, dtype=np.float32)
+            normalized[finite_mask] = (depth[finite_mask] - min_depth) / (max_depth - min_depth)
+            debug_image = np.clip(normalized * 255.0, 0.0, 255.0).astype(np.uint8)
+        else:
+            debug_image = np.zeros(depth.shape, dtype=np.uint8)
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    cv.imwrite(output_path, debug_image)
+
+
 def read_video_frames(video_path=None, left_video_path=None, right_video_path=None):
     if not video_path:
         if not left_video_path or not right_video_path:

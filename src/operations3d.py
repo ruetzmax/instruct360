@@ -5,7 +5,7 @@ import tempfile
 import open3d
 import trimesh
 from src.operations2d import ImageChunk, get_masks_from_image_chunks
-from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh
+from src.util import normalize_rotation_matrix, normalize_translation_vector, normalize_scale_vector, read_trimesh, write_depth_image
 from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
 from src.inference.inference_utils import image_to_base64
 import torch
@@ -106,6 +106,7 @@ def estimate_pose_for_image_chunk(
     is_first_frame,
     foundationpose_env="foundationpose",
     da_env="instruct360",
+    depth_debug_image_path=None,
 ):
     os.makedirs("temp", exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
@@ -135,6 +136,12 @@ def estimate_pose_for_image_chunk(
             )
         else:
             print(f"[depth] units={da_output_data.get('depth_units', 'm')} no finite values")
+
+    if depth_debug_image_path:
+        try:
+            write_depth_image(depth_npy_path, depth_debug_image_path)
+        except Exception as exc:
+            print(f"[depth] failed to write debug image to {depth_debug_image_path}: {exc}")
 
     mask_base64 = None
     if is_first_frame:
