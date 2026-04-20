@@ -270,10 +270,10 @@ def track_object_poses_for_mesh(
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
-    K = estimate_intrinsics_for_chunk(initial_image_chunk)
-    # K = np.array([[395.27175903,   0.        , 350.        ],
-    #    [  0.        , 395.27175903, 350.        ],
-    #    [  0.        ,   0.        ,   1.        ]])
+    # K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    K = np.array([[398.233,   0.        , 350.        ],
+       [  0.        , 398.233, 350.        ],
+       [  0.        ,   0.        ,   1.        ]])
 
     # K = np.array([[348.59320068,   0.        , 350.        ],
     #    [  0.        , 348.59320068, 350.        ],
@@ -299,96 +299,97 @@ def track_object_poses_for_mesh(
         next_frame = frames[frame_idx]
         effective_search_line_length = search_line_length
         
-        # if the contour center is available, construct the next chunk from that
-        if next_contour_center is not None:
-            next_image_chunk = ImageChunk.from_image_point(next_frame, next_contour_center, initial_image_chunk_size)
-        else:
-            # otherwise, look for the object in the whole frame and get most similar image chunk
-            next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
-            image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
-            next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
-            
-            # if no object can be found, use the previous chunk position and continue searching in the next frame
-            if next_image_chunk is None:
-                next_image_chunk = ImageChunk.from_image_point(next_frame, previous_image_chunk.center, initial_image_chunk_size)
-                tracked_chunk_relative_scales.append(tracked_chunk_relative_scales[-1])
-                tracked_chunk_relative_rotations.append(tracked_chunk_relative_rotations[-1])
-                tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
-                tracked_world_rotations.append(tracked_world_rotations[-1])
-                tracked_world_translations.append(tracked_world_translations[-1])
-                tracked_image_chunk_centers.append(next_image_chunk.center)
-                tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
-                previous_image_chunk = next_image_chunk
-                if video_output_path is not None:
-                    vis_img = render_contour_with_correspondences(
-                        next_image_chunk.image,
-                        contour_points_2d if contour_points_2d is not None else np.zeros((0,2)),
-                    )
-                    rendered_frames.append(vis_img)
-                continue
-            
-        # if we are on the first frame, perform tracking on only the object mask for better alignment
-        if frame_idx == 1 and do_cv_tracking:
-            mask = get_masks_from_image_chunks([next_image_chunk], prompt=class_name, use_gpu=use_gpu)[0]
-            rgb = mask[..., :3].copy()
-            alpha = mask[..., 3]
-            rgb[alpha == 0] = 255
-            mask = rgb
-            
-            next_image_chunk.image = mask
-            effective_search_line_length = initial_seach_line_length
-        # for every other frame, adjust the previous transforms by the change in camera pose and chunk position between frames for more accurate projection
-        else:
-            previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_by_chunk_rotation(
-                [previous_world_rotation],
-                [previous_world_translation],
-                next_image_chunk,
-                invert=True
-                )
-
-            previous_frame_translation = frame_camera_translations[frame_idx - 1]
-            previous_frame_rotation = frame_camera_rotations[frame_idx - 1]
-            next_frame_translation = frame_camera_translations[frame_idx]
-            next_frame_rotation = frame_camera_rotations[frame_idx]
-            previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_between_cameras(
-                [previous_chunk_relative_rotation],
-                [previous_chunk_relative_translation],
-                next_frame_translation,
-                next_frame_rotation,
-                previous_frame_translation,
-                previous_frame_rotation
-            )
-                    
-        # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
-        cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
-            scaled_mesh,
-            rotation_matrix=previous_chunk_relative_rotation,
-            translation_vector=previous_chunk_relative_translation,
-        )
-        cv_rotation, _ = cv2.Rodrigues(cv_rotation_mat)
-        
-        # extract contour to get the center of the next image chunk
-        contour_points_2d, contour_points_3d = cv2.rapid.extractControlPoints(
-            num_contour_points,
-            search_line_length,
-            cv_vertices,
-            cv_rotation,
-            cv_translation,
-            K,
-            next_image_chunk.image.shape[:2],
-            cv_tris,
-        )
-        if contour_points_2d is None or contour_points_2d.size == 0:
-            raise RuntimeError("Object has moved out of frame. This happens only when big jumps occur, probably due to mismatching correspondencies.")
-       
-        # use contour center (in image coordinates) as the center of the next image chunk
-        contour_center_image = np.mean(contour_points_2d, axis=0)[0]
-        h, w = next_image_chunk.image.shape[:2]
-        offset_x = contour_center_image[0] / w - 0.5
-        offset_y = contour_center_image[1] / h - 0.5
-        next_contour_center = (next_image_chunk.center[0] + offset_x, next_image_chunk.center[1] + offset_y)
-        
+        # do tracking using traditional methods
         if do_cv_tracking:
+            # if the contour center is available, construct the next chunk from that
+            if next_contour_center is not None:
+                next_image_chunk = ImageChunk.from_image_point(next_frame, next_contour_center, initial_image_chunk_size)
+            else:
+                # otherwise, look for the object in the whole frame and get most similar image chunk
+                next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
+                image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
+                next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
+                
+                # if no object can be found, use the previous chunk position and continue searching in the next frame
+                if next_image_chunk is None:
+                    next_image_chunk = ImageChunk.from_image_point(next_frame, previous_image_chunk.center, initial_image_chunk_size)
+                    tracked_chunk_relative_scales.append(tracked_chunk_relative_scales[-1])
+                    tracked_chunk_relative_rotations.append(tracked_chunk_relative_rotations[-1])
+                    tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
+                    tracked_world_rotations.append(tracked_world_rotations[-1])
+                    tracked_world_translations.append(tracked_world_translations[-1])
+                    tracked_image_chunk_centers.append(next_image_chunk.center)
+                    tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
+                    previous_image_chunk = next_image_chunk
+                    if video_output_path is not None:
+                        vis_img = render_contour_with_correspondences(
+                            next_image_chunk.image,
+                            contour_points_2d if contour_points_2d is not None else np.zeros((0,2)),
+                        )
+                        rendered_frames.append(vis_img)
+                    continue
+            
+            # if we are on the first frame, perform tracking on only the object mask for better alignment
+            if frame_idx == 1:
+                mask = get_masks_from_image_chunks([next_image_chunk], prompt=class_name, use_gpu=use_gpu)[0]
+                rgb = mask[..., :3].copy()
+                alpha = mask[..., 3]
+                rgb[alpha == 0] = 255
+                mask = rgb
+                
+                next_image_chunk.image = mask
+                effective_search_line_length = initial_seach_line_length
+            # for every other frame, adjust the previous transforms by the change in camera pose and chunk position between frames for more accurate projection
+            else:
+                previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_by_chunk_rotation(
+                    [previous_world_rotation],
+                    [previous_world_translation],
+                    next_image_chunk,
+                    invert=True
+                    )
+
+                previous_frame_translation = frame_camera_translations[frame_idx - 1]
+                previous_frame_rotation = frame_camera_rotations[frame_idx - 1]
+                next_frame_translation = frame_camera_translations[frame_idx]
+                next_frame_rotation = frame_camera_rotations[frame_idx]
+                previous_chunk_relative_rotation, previous_chunk_relative_translation = adjust_transforms_between_cameras(
+                    [previous_chunk_relative_rotation],
+                    [previous_chunk_relative_translation],
+                    next_frame_translation,
+                    next_frame_rotation,
+                    previous_frame_translation,
+                    previous_frame_rotation
+                )
+                        
+            # get transforms inside the previous chunk in OpenCV coordinates, so we can project them into the next frame
+            cv_vertices, cv_tris, cv_rotation_mat, cv_translation = trimesh_to_opencv(
+                scaled_mesh,
+                rotation_matrix=previous_chunk_relative_rotation,
+                translation_vector=previous_chunk_relative_translation,
+            )
+            cv_rotation, _ = cv2.Rodrigues(cv_rotation_mat)
+            
+            # extract contour to get the center of the next image chunk
+            contour_points_2d, contour_points_3d = cv2.rapid.extractControlPoints(
+                num_contour_points,
+                search_line_length,
+                cv_vertices,
+                cv_rotation,
+                cv_translation,
+                K,
+                next_image_chunk.image.shape[:2],
+                cv_tris,
+            )
+            if contour_points_2d is None or contour_points_2d.size == 0:
+                raise RuntimeError("Object has moved out of frame. This happens only when big jumps occur, probably due to mismatching correspondencies.")
+        
+            # use contour center (in image coordinates) as the center of the next image chunk
+            contour_center_image = np.mean(contour_points_2d, axis=0)[0]
+            h, w = next_image_chunk.image.shape[:2]
+            offset_x = contour_center_image[0] / w - 0.5
+            offset_y = contour_center_image[1] / h - 0.5
+            next_contour_center = (next_image_chunk.center[0] + offset_x, next_image_chunk.center[1] + offset_y)
+            
             # perform a tracking step to get the new rotation and translation
             if mode == "RAPID":
                 _, cv_rotation_new, cv_translation_new, _ = cv2.rapid.rapid(
@@ -441,14 +442,19 @@ def track_object_poses_for_mesh(
                 next_rotation_cv,
                 next_translation_cv,
             )
+        # do pose estimation using FoundationPose model
         else:
-            # do pose estimation using FoundationPose model
+            # look for the object in the whole frame and get most similar image chunk
+            next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
+            image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
+            next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
+
             next_rotation_chunk, next_translation_chunk = estimate_pose_for_image_chunk(
                 chunk=next_image_chunk,
                 unposed_mesh_path=scaled_mesh_path,
                 class_name=class_name,
                 K=K,
-                is_first_frame=True,
+                is_first_frame=frame_idx==1,
                 da_env="da"
             )
 
@@ -491,6 +497,7 @@ def track_object_poses_for_mesh(
         
         # visualization
         if video_output_path is not None:
+            if do_cv_tracking:
                 try:
                     bundle, src_locations = cv2.rapid.extractLineBundle(
                         effective_search_line_length,
@@ -516,7 +523,10 @@ def track_object_poses_for_mesh(
                     center_2d=contour_center_image if (contour_points_2d is not None and contour_points_2d.size > 0) else None,
                     bundle_src_locations=src_locations,
                 )
-                rendered_frames.append(vis_img)
+            else:
+                vis_img = next_image_chunk.image
+
+            rendered_frames.append(vis_img)
         
     # write visualization video
     if video_output_path is not None and rendered_frames:
