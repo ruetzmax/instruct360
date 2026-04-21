@@ -322,6 +322,18 @@ class FoundationPoseWorker:
                 mask = mask[..., -1]
             mask = mask.astype(bool)
 
+        valid_depth = np.isfinite(depth) & (depth >= 0.001)
+        if not np.any(valid_depth):
+            raise ValueError("No valid depth pixels found (depth >= 0.001)")
+
+        if not np.any(mask & valid_depth):
+            print(
+                "[foundationpose_worker] provided mask has no overlap with valid depth; "
+                "falling back to valid-depth mask.",
+                file=sys.stderr,
+            )
+            mask = valid_depth
+
         iteration = 5 if is_first_frame else 1
         pose = est.register(K=intrinsics, rgb=rgb, depth=depth, ob_mask=mask, iteration=iteration)
 
