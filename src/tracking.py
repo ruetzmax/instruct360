@@ -249,13 +249,13 @@ def track_object_poses_for_mesh(
         mode="RAPID",
         use_gpu=False,
         use_kalman=False,
-        sam3d_to_metric_scale_factor=0.3
+        sam3d_to_metric_scale_factor=1.0
     ):
 
     initial_chunk_relative_scale = np.asarray(initial_chunk_relative_scale, dtype=np.float32)
 
     #overwrite chunks size to use FoundationPose train format
-    initial_image_chunk_size = (640, 480)
+    initial_image_chunk_size = (300, 300)
 
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
@@ -283,7 +283,7 @@ def track_object_poses_for_mesh(
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
-    K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    # K = estimate_intrinsics_for_chunk(initial_image_chunk)
     # K = np.array([[398.233,   0.        , 350.        ],
     #    [  0.        , 398.233, 350.        ],
     #    [  0.        ,   0.        ,   1.        ]])
@@ -291,6 +291,9 @@ def track_object_poses_for_mesh(
     # K = np.array([[348.59320068,   0.        , 350.        ],
     #    [  0.        , 348.59320068, 350.        ],
     #    [  0.        ,   0.        ,   1.        ]])
+    K = np.array([[503.72375488 ,  0.  ,       150.        ],
+ [  0.    ,     503.72375488 ,150.        ],
+ [  0.  ,         0.     ,      1.        ]])
 
     print(K)
     
@@ -323,7 +326,7 @@ def track_object_poses_for_mesh(
                 next_image_chunk = ImageChunk.from_image_point(next_frame, next_contour_center, initial_image_chunk_size)
             else:
                 # otherwise, look for the object in the whole frame and get most similar image chunk
-                next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
+                next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu, chunk_size=initial_image_chunk_size)
                 image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
                 next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
                 
@@ -463,7 +466,7 @@ def track_object_poses_for_mesh(
         else:
             # look for the object in the whole frame and get most similar image chunk
             next_frame_bb2ds = get_2d_bounding_boxes(next_frame, class_name, use_gpu=use_gpu)
-            image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
+            image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal", chunk_size=initial_image_chunk_size)
             next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
 
             # if no chunk could be found (ie. the object is not visible or too distorted) use last frames values and continue looking next frame
@@ -495,7 +498,7 @@ def track_object_poses_for_mesh(
                     foundationpose_debug_dir,
                     f"pose_frame_{frame_idx:06d}.png",
                 ),
-                foundationpose_debug_level=1,
+                foundationpose_debug_level=3,
             )
 
             # sam3d and foundationpose object scales are not in same system, so there is a scale factor introduced
