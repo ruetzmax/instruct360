@@ -107,6 +107,7 @@ def estimate_pose_for_image_chunk(
     foundationpose_env="foundationpose",
     da_env="instruct360",
     depth_debug_image_path=None,
+    foundationpose_debug_image_path=None,
 ):
     os.makedirs("temp", exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
@@ -157,6 +158,9 @@ def estimate_pose_for_image_chunk(
         "unposed_mesh_path": str(unposed_mesh_path),
         "intrinsics": K.tolist(),
     }
+    if foundationpose_debug_image_path:
+        input_data["debug_image_path"] = foundationpose_debug_image_path
+
     try:
         output_data = runner.run(input_data)
     finally:

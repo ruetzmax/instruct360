@@ -308,7 +308,9 @@ def track_object_poses_for_mesh(
     next_contour_center = None
     rendered_frames = [] if video_output_path else None
     depth_debug_dir = os.path.join("temp", "depth_debug")
+    foundationpose_debug_dir = os.path.join("temp", "foundationpose_debug")
     os.makedirs(depth_debug_dir, exist_ok=True)
+    os.makedirs(foundationpose_debug_dir, exist_ok=True)
     for frame_idx in range(1, len(frames)):
         print(f"Tracking mesh in frame {frame_idx}/{len(frames)-1}")
         next_frame = frames[frame_idx]
@@ -489,6 +491,10 @@ def track_object_poses_for_mesh(
                 is_first_frame=True,
                 da_env="da",
                 depth_debug_image_path=os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png"),
+                foundationpose_debug_image_path=os.path.join(
+                    foundationpose_debug_dir,
+                    f"pose_frame_{frame_idx:06d}.png",
+                ),
             )
 
             # sam3d and foundationpose object scales are not in same system, so there is a scale factor introduced

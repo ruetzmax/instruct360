@@ -8,6 +8,7 @@ import glob
 
 import numpy as np
 import trimesh
+import cv2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -278,7 +279,9 @@ class FoundationPoseWorker:
         intrinsics = input_data.get("intrinsics")
         debug = int(input_data.get("debug", 0))
         debug_dir = input_data.get("debug_dir", os.path.join(workspace_root, "temp", "foundationpose_debug"))
+        debug_image_path = input_data.get("debug_image_path", os.path.join(debug_dir, "debug_rgb.png"))
         os.makedirs(debug_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(debug_image_path), exist_ok=True)
 
         rgb = base64_to_image(rgb_base64)
         if not depth_npy_path:
@@ -294,7 +297,8 @@ class FoundationPoseWorker:
 
         mesh = read_trimesh(unposed_mesh_path)
 
-        to_origin, _ = trimesh.bounds.oriented_bounds(mesh)
+        to_origin, extents = trimesh.bounds.oriented_bounds(mesh)
+        bbox = np.stack([-extents/2, extents/2], axis=0).reshape(2,3)
 
         est = fp.FoundationPose(
             model_pts=mesh.vertices,
@@ -322,6 +326,29 @@ class FoundationPoseWorker:
         pose = est.register(K=intrinsics, rgb=rgb, depth=depth, ob_mask=mask, iteration=iteration)
 
         center_pose = pose @ np.linalg.inv(to_origin)
+
+        try:
+            vis = fp_utils.draw_posed_3d_box(
+                intrinsics,
+                img=rgb.copy(),
+                ob_in_cam=center_pose,
+                bbox=bbox,
+            )
+            vis = fp_utils.draw_xyz_axis(
+                vis,
+                ob_in_cam=center_pose,
+                scale=0.1,
+                K=intrinsics,
+                thickness=3,
+                transparency=0,
+                is_input_rgb=True,
+            )
+            cv2.imwrite(debug_image_path, cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+        except Exception as exc:
+            print(
+                f"[foundationpose_worker] failed to write debug frame to {debug_image_path}: {exc}",
+                file=sys.stderr,
+            )
 
         return {
             "pose": pose.tolist(),
