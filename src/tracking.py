@@ -495,6 +495,7 @@ def track_object_poses_for_mesh(
                     foundationpose_debug_dir,
                     f"pose_frame_{frame_idx:06d}.png",
                 ),
+                foundationpose_debug_level=1,
             )
 
             # sam3d and foundationpose object scales are not in same system, so there is a scale factor introduced

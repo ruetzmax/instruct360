@@ -327,28 +327,49 @@ class FoundationPoseWorker:
 
         center_pose = pose @ np.linalg.inv(to_origin)
 
-        try:
-            vis = fp_utils.draw_posed_3d_box(
-                intrinsics,
-                img=rgb.copy(),
-                ob_in_cam=center_pose,
-                bbox=bbox,
-            )
-            vis = fp_utils.draw_xyz_axis(
-                vis,
-                ob_in_cam=center_pose,
-                scale=0.1,
-                K=intrinsics,
-                thickness=3,
-                transparency=0,
-                is_input_rgb=True,
-            )
-            cv2.imwrite(debug_image_path, cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
-        except Exception as exc:
-            print(
-                f"[foundationpose_worker] failed to write debug frame to {debug_image_path}: {exc}",
-                file=sys.stderr,
-            )
+        if debug >= 3:
+            try:
+                transformed_mesh = mesh.copy()
+                transformed_mesh.apply_transform(pose)
+                transformed_mesh.export(os.path.join(debug_dir, "model_tf.obj"))
+
+                xyz_map = fp_utils.depth2xyzmap(depth, intrinsics)
+                valid = depth >= 0.001
+                if np.any(valid):
+                    pcd = fp_utils.toOpen3dCloud(xyz_map[valid], rgb[valid])
+                    fp_utils.o3d.io.write_point_cloud(
+                        os.path.join(debug_dir, "scene_complete.ply"),
+                        pcd,
+                    )
+            except Exception as exc:
+                print(
+                    f"[foundationpose_worker] failed to write debug>=3 artifacts in {debug_dir}: {exc}",
+                    file=sys.stderr,
+                )
+
+        if debug >= 1:
+            try:
+                vis = fp_utils.draw_posed_3d_box(
+                    intrinsics,
+                    img=rgb.copy(),
+                    ob_in_cam=center_pose,
+                    bbox=bbox,
+                )
+                vis = fp_utils.draw_xyz_axis(
+                    vis,
+                    ob_in_cam=center_pose,
+                    scale=0.1,
+                    K=intrinsics,
+                    thickness=3,
+                    transparency=0,
+                    is_input_rgb=True,
+                )
+                cv2.imwrite(debug_image_path, cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+            except Exception as exc:
+                print(
+                    f"[foundationpose_worker] failed to write debug frame to {debug_image_path}: {exc}",
+                    file=sys.stderr,
+                )
 
         return {
             "pose": pose.tolist(),
