@@ -252,6 +252,8 @@ def track_object_poses_for_mesh(
         sam3d_to_metric_scale_factor=0.3
     ):
 
+    initial_chunk_relative_scale = np.asarray(initial_chunk_relative_scale, dtype=np.float32)
+
     #overwrite chunks size to use FoundationPose train format
     initial_image_chunk_size = (640, 480)
 
@@ -269,7 +271,12 @@ def track_object_poses_for_mesh(
     unposed_mesh = read_trimesh(unposed_mesh_path)
     identity_rotation = np.eye(3, dtype=np.float32)
     zero_translation = np.zeros(3, dtype=np.float32)
-    scaled_mesh = apply_mesh_transforms(unposed_mesh, identity_rotation, zero_translation, initial_chunk_relative_scale * sam3d_to_metric_scale_factor)
+    scaled_mesh = apply_mesh_transforms(
+        unposed_mesh,
+        identity_rotation,
+        zero_translation,
+        initial_chunk_relative_scale * sam3d_to_metric_scale_factor,
+    )
     scaled_mesh_path = 'temp/scaled.glb'
     scaled_mesh.export(scaled_mesh_path)
 
@@ -458,19 +465,19 @@ def track_object_poses_for_mesh(
             next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
 
             # if no chunk could be found (ie. the object is not visible or too distorted) use last frames values and continue looking next frame
-            if next_image_chunk == None:
+            if next_image_chunk is None:
                 next_image_chunk = ImageChunk.from_image_point(next_frame, previous_image_chunk.center, initial_image_chunk_size)
-                    tracked_chunk_relative_scales.append(tracked_chunk_relative_scales[-1])
-                    tracked_chunk_relative_rotations.append(tracked_chunk_relative_rotations[-1])
-                    tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
-                    tracked_world_rotations.append(tracked_world_rotations[-1])
-                    tracked_world_translations.append(tracked_world_translations[-1])
-                    tracked_image_chunk_centers.append(next_image_chunk.center)
-                    tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
-                    previous_image_chunk = next_image_chunk
-                    if video_output_path is not None:
-                        rendered_frames.append(next_image_chunk.image)
-                    continue
+                tracked_chunk_relative_scales.append(tracked_chunk_relative_scales[-1])
+                tracked_chunk_relative_rotations.append(tracked_chunk_relative_rotations[-1])
+                tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
+                tracked_world_rotations.append(tracked_world_rotations[-1])
+                tracked_world_translations.append(tracked_world_translations[-1])
+                tracked_image_chunk_centers.append(next_image_chunk.center)
+                tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
+                previous_image_chunk = next_image_chunk
+                if video_output_path is not None:
+                    rendered_frames.append(next_image_chunk.image)
+                continue
 
 
             # run FoundationPose
