@@ -287,17 +287,6 @@ class FoundationPoseWorker:
         if not depth_npy_path:
             raise ValueError("depth_npy_path is required; depth estimation is not supported in foundationpose_worker")
         depth = np.load(depth_npy_path).astype(np.float32)
-        valid_depth_for_inversion = np.isfinite(depth) & (depth > 1e-6)
-        if np.any(valid_depth_for_inversion):
-            valid_values = depth[valid_depth_for_inversion]
-            depth_min = np.min(valid_values)
-            depth_max = np.max(valid_values)
-            depth_flipped = np.zeros_like(depth, dtype=np.float32)
-            depth_flipped[valid_depth_for_inversion] = depth_min + depth_max - valid_values
-            depth = depth_flipped
-        else:
-            raise ValueError("No valid depth values to flip in foundationpose_worker")
-
         mask = base64_to_image(mask_base64) if mask_base64 is not None else None
         intrinsics = np.asarray(intrinsics, dtype=np.float32)
 
@@ -333,9 +322,9 @@ class FoundationPoseWorker:
                 mask = mask[..., -1]
             mask = mask.astype(bool)
 
-        valid_depth = np.isfinite(depth) & (depth > 1e-6)
+        valid_depth = np.isfinite(depth) & (depth >= 0.001)
         if not np.any(valid_depth):
-            raise ValueError("No valid depth pixels found after depth flip")
+            raise ValueError("No valid depth pixels found (depth >= 0.001)")
 
         if not np.any(mask & valid_depth):
             print(
@@ -357,7 +346,7 @@ class FoundationPoseWorker:
                 transformed_mesh.export(os.path.join(debug_dir, "model_tf.obj"))
 
                 xyz_map = fp_utils.depth2xyzmap(depth, intrinsics)
-                valid = np.isfinite(depth) & (depth > 1e-6)
+                valid = depth >= 0.001
                 if np.any(valid):
                     pcd = fp_utils.toOpen3dCloud(xyz_map[valid], rgb[valid])
                     fp_utils.o3d.io.write_point_cloud(
