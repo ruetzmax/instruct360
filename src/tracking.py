@@ -177,12 +177,14 @@ def reconstruct_meshes_for_class(
         image,
         class_name,
         use_gpu=use_gpu,
+        use_persistent_runner=False # shut down model after use to save some VRAM. Sam3d is biig...
     )
     image_chunks = bounding_boxes_to_image_chunks(image, bounding_boxes_2d, orientation="horizontal")
     masks = get_masks_from_image_chunks(
         image_chunks,
         prompt=class_name,
         use_gpu=use_gpu,
+        use_persistent_runner=False 
     )
     posed_meshes, unposed_meshes, scales, rotations, translations = reconstruct_meshes_for_chunks(
         image_chunks,
@@ -246,9 +248,13 @@ def track_object_poses_for_mesh(
         initial_seach_line_length=30,
         mode="RAPID",
         use_gpu=False,
-        use_kalman=True,
+        use_kalman=False,
         sam3d_to_metric_scale_factor=0.3
     ):
+
+    #overwrite chunks size to use FoundationPose train format
+    initial_image_chunk_size = (640, 480)
+
     tracked_chunk_relative_scales = [initial_chunk_relative_scale]
     tracked_chunk_relative_rotations = [initial_chunk_relative_rotation]
     tracked_chunk_relative_translations = [initial_chunk_relative_translation]
@@ -263,17 +269,17 @@ def track_object_poses_for_mesh(
     unposed_mesh = read_trimesh(unposed_mesh_path)
     identity_rotation = np.eye(3, dtype=np.float32)
     zero_translation = np.zeros(3, dtype=np.float32)
-    scaled_mesh = apply_mesh_transforms(unposed_mesh, identity_rotation, zero_translation, initial_chunk_relative_scale)
+    scaled_mesh = apply_mesh_transforms(unposed_mesh, identity_rotation, zero_translation, initial_chunk_relative_scale * sam3d_to_metric_scale_factor)
     scaled_mesh_path = 'temp/scaled.glb'
     scaled_mesh.export(scaled_mesh_path)
 
     
     # reconstruct initial chunk
     initial_image_chunk = ImageChunk.from_image_point(frames[0], initial_image_chunk_center, initial_image_chunk_size)
-    # K = estimate_intrinsics_for_chunk(initial_image_chunk)
-    K = np.array([[398.233,   0.        , 350.        ],
-       [  0.        , 398.233, 350.        ],
-       [  0.        ,   0.        ,   1.        ]])
+    K = estimate_intrinsics_for_chunk(initial_image_chunk)
+    # K = np.array([[398.233,   0.        , 350.        ],
+    #    [  0.        , 398.233, 350.        ],
+    #    [  0.        ,   0.        ,   1.        ]])
 
     # K = np.array([[348.59320068,   0.        , 350.        ],
     #    [  0.        , 348.59320068, 350.        ],
@@ -451,12 +457,29 @@ def track_object_poses_for_mesh(
             image_chunk_candidates = bounding_boxes_to_image_chunks(next_frame, next_frame_bb2ds, orientation="horizontal")
             next_image_chunk = find_closest_image_chunk(previous_image_chunk, image_chunk_candidates)
 
+            # if no chunk could be found (ie. the object is not visible or too distorted) use last frames values and continue looking next frame
+            if next_image_chunk == None:
+                next_image_chunk = ImageChunk.from_image_point(next_frame, previous_image_chunk.center, initial_image_chunk_size)
+                    tracked_chunk_relative_scales.append(tracked_chunk_relative_scales[-1])
+                    tracked_chunk_relative_rotations.append(tracked_chunk_relative_rotations[-1])
+                    tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
+                    tracked_world_rotations.append(tracked_world_rotations[-1])
+                    tracked_world_translations.append(tracked_world_translations[-1])
+                    tracked_image_chunk_centers.append(next_image_chunk.center)
+                    tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
+                    previous_image_chunk = next_image_chunk
+                    if video_output_path is not None:
+                        rendered_frames.append(next_image_chunk.image)
+                    continue
+
+
+            # run FoundationPose
             next_rotation_chunk, next_translation_chunk = estimate_pose_for_image_chunk(
                 chunk=next_image_chunk,
                 unposed_mesh_path=scaled_mesh_path,
                 class_name=class_name,
                 K=K,
-                is_first_frame=frame_idx==1,
+                is_first_frame=True,
                 da_env="da",
                 depth_debug_image_path=os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png"),
             )
@@ -477,7 +500,7 @@ def track_object_poses_for_mesh(
         # convert chunk-relative transforms to world-relative transforms
         next_rotation_world, next_translation_world = adjust_transforms_by_chunk_rotation([next_rotation_chunk], [next_translation_chunk], next_image_chunk)
         next_rotation_world = next_rotation_world[0]
-        next_translation_world = next_translation_world[0]
+        next_translation_world = next_translation_world[0] 
         
         #apply kalman filter to world transforms
         if use_kalman:

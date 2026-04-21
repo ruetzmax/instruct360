@@ -106,10 +106,14 @@ def _get_ovseg_runner(env_name="ovseg"):
     return _ovseg_runner
 
 
-def _get_sam3_runner(env_name="sam3d-objects"):
+def _get_sam3_runner(env_name="sam3d-objects", is_threaded=True):
     global _sam3_runner
     if _sam3_runner is None:
-        _sam3_runner = ThreadedCondaInferenceRunner(env_name, "sam3_worker.py")
+        if is_threaded:
+            _sam3_runner = ThreadedCondaInferenceRunner(env_name, "sam3_worker.py")
+        else:
+            _sam3_runner = CondaInferenceRunner(env_name, "sam3_inference.py")
+
     return _sam3_runner
 
 # see: https://github.com/peterbraden/insv-to-yt, https://www.arj.no/2025/12/19/insta360-to-equirectangular/
@@ -150,10 +154,11 @@ def get_2d_bounding_boxes(
     use_gpu=False,
     dino_env="grounding_dino",
     sam3_env="sam3",
+    use_persistent_runner=True
 ):
     if use_gpu:
         threshold = 0.7
-        runner = _get_sam3_runner(sam3_env)
+        runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner)
         input_data = {
             "chunk_images_base64": [image_to_base64(image)],
             "prompt": prompt,
@@ -201,8 +206,9 @@ def get_masks_from_image_chunks(
     use_gpu=False,
     ovseg_env="ovseg",
     sam3_env="sam3",
+    use_persistent_runner=True
 ):
-    runner = _get_sam3_runner(sam3_env) if use_gpu else _get_ovseg_runner(ovseg_env)
+    runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner) if use_gpu else _get_ovseg_runner(ovseg_env)
     
     input_data = {
         "chunk_images_base64": [image_to_base64(chunk.image) for chunk in image_chunks],

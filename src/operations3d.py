@@ -30,7 +30,7 @@ def _get_ovmono_runner(env_name="ovmono3d"):
 def _get_sam3d_runner(env_name="sam3d-objects"):
     global _sam3d_runner
     if _sam3d_runner is None:
-        _sam3d_runner = ThreadedCondaInferenceRunner(env_name, "sam3d_worker.py")
+        _sam3d_runner = CondaInferenceRunner(env_name, "sam3d_inference.py")
     return _sam3d_runner
 
 
