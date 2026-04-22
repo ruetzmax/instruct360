@@ -367,8 +367,8 @@ def trimesh_to_open3d(mesh):
 
     o3d_mesh.compute_vertex_normals()
     
-    rot_90_x = open3d.geometry.get_rotation_matrix_from_axis_angle([np.pi / 2, 0.0, 0.0])
-    o3d_mesh.rotate(rot_90_x, center=[0.0, 0.0, 0.0])
+    # rot_90_x = open3d.geometry.get_rotation_matrix_from_axis_angle([np.pi / 2, 0.0, 0.0])
+    # o3d_mesh.rotate(rot_90_x, center=[0.0, 0.0, 0.0])
                                     
     return o3d_mesh
 

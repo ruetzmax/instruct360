@@ -361,6 +361,19 @@ class FoundationPoseWorker:
 
         if debug >= 1:
             try:
+                debug_image_dir = os.path.dirname(debug_image_path)
+                debug_image_name = os.path.basename(debug_image_path)
+                debug_image_stem, debug_image_ext = os.path.splitext(debug_image_name)
+                if not debug_image_ext:
+                    debug_image_ext = ".png"
+
+                rgb_debug_path = os.path.join(debug_image_dir, f"{debug_image_stem}_rgb{debug_image_ext}")
+                mask_debug_path = os.path.join(debug_image_dir, f"{debug_image_stem}_mask{debug_image_ext}")
+
+                cv2.imwrite(rgb_debug_path, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+                mask_image = (mask.astype(np.uint8) * 255)
+                cv2.imwrite(mask_debug_path, mask_image)
+
                 vis = fp_utils.draw_posed_3d_box(
                     intrinsics,
                     img=rgb.copy(),

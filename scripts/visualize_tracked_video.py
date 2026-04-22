@@ -37,6 +37,16 @@ static_geometries = []
 
 ENABLE_FILTERING = False
 
+RECON_TRANSLATION_SCALE = 0.3
+RECON_YZ_FLIP = np.array(
+    [
+        [1.0, 0.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, -1.0],
+    ],
+    dtype=np.float32,
+)
+
 def _point_cloud_from_landmarks(landmarks):       
         if len(landmarks) == 0:
             return
@@ -218,7 +228,14 @@ def do_visualization(
                         if unposed_mesh_path and os.path.exists(unposed_mesh_path):
                             try:
                                 unposed_mesh = read_trimesh(unposed_mesh_path)
-                                transformed_mesh = apply_mesh_transforms(unposed_mesh, rotation, translation, scale)
+                                adjusted_translation = RECON_YZ_FLIP @ (translation * RECON_TRANSLATION_SCALE)
+                                adjusted_rotation = RECON_YZ_FLIP @ rotation @ RECON_YZ_FLIP
+                                transformed_mesh = apply_mesh_transforms(
+                                    unposed_mesh,
+                                    adjusted_rotation,
+                                    adjusted_translation,
+                                    scale,
+                                )
                                 open3d_mesh = trimesh_to_open3d(transformed_mesh)
                                 
                                 if frame_camera_translation and frame_camera_rotation:
