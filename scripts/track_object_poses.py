@@ -85,7 +85,7 @@ def track_object_poses(
 				search_line_length=search_line_length,
 				initial_seach_line_length=initial_search_line_length,
 				mode=mode,
-				use_gpu=use_gpu
+				use_gpu=use_gpu,
 			)
 
 			tracked_results.append({
@@ -114,9 +114,11 @@ def track_object_poses(
 
 		num_frames = len(tracked_chunk_relative_scales)
 		if num_frames > len(frames_data):
-			raise ValueError(
-				f"Tracking produced {num_frames} frames, but input pickle only has {len(frames_data)} frame entries"
+			print(
+				f"Warning: Tracking produced {num_frames} frames, but input pickle has {len(frames_data)}; "
+				"truncating to pickle length."
 			)
+			num_frames = len(frames_data)
 
 		for frame_idx in range(num_frames):
 			frame_data = frames_data[frame_idx]
