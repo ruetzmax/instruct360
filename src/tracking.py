@@ -249,7 +249,7 @@ def track_object_poses_for_mesh(
         mode="RAPID",
         use_gpu=False,
         use_kalman=True,
-        sam3d_to_metric_scale_factor=1.0
+        sam3d_to_metric_scale_factor=2.0
     ):
 
     initial_chunk_relative_scale = np.asarray(initial_chunk_relative_scale, dtype=np.float32)
