@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 
 import numpy as np
 import torch
@@ -9,6 +10,61 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
 import depth_pro
+
+
+WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _find_depth_pro_checkpoint(input_data):
+	override = input_data.get("checkpoint_path")
+	if isinstance(override, str) and override.strip():
+		checkpoint_path = os.path.abspath(override.strip())
+		if os.path.isfile(checkpoint_path):
+			return checkpoint_path
+
+	env_checkpoint = os.environ.get("DEPTH_PRO_CHECKPOINT")
+	if isinstance(env_checkpoint, str) and env_checkpoint.strip():
+		checkpoint_path = os.path.abspath(env_checkpoint.strip())
+		if os.path.isfile(checkpoint_path):
+			return checkpoint_path
+
+	candidates = [
+		os.path.join(os.getcwd(), "checkpoints", "depth_pro.pt"),
+		os.path.join(WORKSPACE_ROOT, "checkpoints", "depth_pro.pt"),
+		os.path.join(WORKSPACE_ROOT, "ml-depth-pro", "checkpoints", "depth_pro.pt"),
+		os.path.join(os.path.dirname(WORKSPACE_ROOT), "ml-depth-pro", "checkpoints", "depth_pro.pt"),
+	]
+
+	for candidate in candidates:
+		if os.path.isfile(candidate):
+			return os.path.abspath(candidate)
+
+	for scan_root in [WORKSPACE_ROOT, os.path.dirname(WORKSPACE_ROOT)]:
+		if not os.path.isdir(scan_root):
+			continue
+		for root, _, files in os.walk(scan_root):
+			if "depth_pro.pt" in files:
+				return os.path.abspath(os.path.join(root, "depth_pro.pt"))
+
+	raise FileNotFoundError(
+		"Could not locate depth_pro.pt. Set input field 'checkpoint_path' or env var DEPTH_PRO_CHECKPOINT."
+	)
+
+
+def _stage_checkpoint_for_depth_pro(checkpoint_path):
+	expected_dir = os.path.join(os.getcwd(), "checkpoints")
+	expected_path = os.path.join(expected_dir, "depth_pro.pt")
+
+	if os.path.isfile(expected_path):
+		return
+
+	os.makedirs(expected_dir, exist_ok=True)
+	try:
+		if os.path.islink(expected_path) or os.path.exists(expected_path):
+			os.remove(expected_path)
+		os.symlink(checkpoint_path, expected_path)
+	except Exception:
+		shutil.copy2(checkpoint_path, expected_path)
 
 
 def main():
@@ -26,6 +82,8 @@ def main():
 		raise ValueError("Missing required field: f_px")
 
 	f_px = float(f_px)
+	checkpoint_path = _find_depth_pro_checkpoint(input_data)
+	_stage_checkpoint_for_depth_pro(checkpoint_path)
 
 	model, transform = depth_pro.create_model_and_transforms()
 	model.eval()
