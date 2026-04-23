@@ -249,7 +249,7 @@ def track_object_poses_for_mesh(
         mode="RAPID",
         use_gpu=False,
         use_kalman=True,
-        sam3d_to_metric_scale_factor=2.0
+        sam3d_to_metric_scale_factor=4.0
     ):
 
     initial_chunk_relative_scale = np.asarray(initial_chunk_relative_scale, dtype=np.float32)
@@ -484,14 +484,13 @@ def track_object_poses_for_mesh(
                     rendered_frames.append(next_image_chunk.image)
                 continue
 
-
             # run FoundationPose
             next_rotation_chunk, next_translation_chunk = estimate_pose_for_image_chunk(
                 chunk=next_image_chunk,
                 unposed_mesh_path=scaled_mesh_path,
                 class_name=class_name,
                 K=K,
-                is_first_frame=frame_idx==1,
+                is_first_frame=True,#frame_idx==1,
                 da_env="da",
                 depth_debug_image_path=None,#os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png"),
                 foundationpose_debug_image_path=os.path.join(
