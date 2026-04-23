@@ -15,6 +15,7 @@ _ovmono_runner = None
 _sam3d_runner = None
 _foundationpose_runner = None
 _da_runner = None
+_depth_pro_runner = None
 
 moge_model = None
 
@@ -46,6 +47,13 @@ def _get_da_runner(env_name="instruct360"):
     if _da_runner is None:
         _da_runner = CondaInferenceRunner(env_name, "da_worker.py")
     return _da_runner
+
+
+def _get_depth_pro_runner(env_name="instruct360"):
+    global _depth_pro_runner
+    if _depth_pro_runner is None:
+        _depth_pro_runner = CondaInferenceRunner(env_name, "depth-pro_worker.py")
+    return _depth_pro_runner
         
 
 
@@ -106,6 +114,8 @@ def estimate_pose_for_image_chunk(
     is_first_frame,
     foundationpose_env="foundationpose",
     da_env="instruct360",
+    depth_pro_env="instruct360",
+    depth_source="depth-pro",
     depth_debug_image_path=None,
     foundationpose_debug_image_path=None,
     foundationpose_debug_level=1,
@@ -114,21 +124,40 @@ def estimate_pose_for_image_chunk(
     with tempfile.NamedTemporaryFile(mode="wb", suffix=".npy", prefix="moge_depth_", dir="temp", delete=False) as depth_file:
         depth_npy_path = depth_file.name
 
-    da_runner = _get_da_runner(da_env)
-    da_input_data = {
-        "image_base64": image_to_base64(chunk.image),
-        "depth_npy_path": depth_npy_path,
-        "hf_device": 0,
-        "depth_units": "m",
-    }
-    da_output_data = da_runner.run(da_input_data)
+    image_base64 = image_to_base64(chunk.image)
+    normalized_depth_source = str(depth_source).strip().lower()
 
-    depth_debug = da_output_data.get("depth_debug")
+    if normalized_depth_source in {"depth-pro", "depth_pro", "depthpro"}:
+        depth_runner = _get_depth_pro_runner(depth_pro_env)
+        fx_px = float(K[0, 0])
+        fy_px = float(K[1, 1])
+        f_px = 0.5 * (fx_px + fy_px)
+        depth_input_data = {
+            "image_base64": image_base64,
+            "depth_npy_path": depth_npy_path,
+            "f_px": f_px,
+        }
+        depth_output_data = depth_runner.run(depth_input_data)
+    elif normalized_depth_source in {"da", "depth-anything", "depth_anything"}:
+        da_runner = _get_da_runner(da_env)
+        da_input_data = {
+            "image_base64": image_base64,
+            "depth_npy_path": depth_npy_path,
+            "hf_device": 0,
+            "depth_units": "m",
+        }
+        depth_output_data = da_runner.run(da_input_data)
+    else:
+        raise ValueError(
+            f"Unsupported depth_source '{depth_source}'. Use 'depth-pro' or 'da'."
+        )
+
+    depth_debug = depth_output_data.get("depth_debug")
     if isinstance(depth_debug, dict):
         if depth_debug.get("has_finite"):
             print(
                 "[depth] "
-                f"units={da_output_data.get('depth_units', 'm')} "
+                f"units={depth_output_data.get('depth_units', 'm')} "
                 f"shape={tuple(depth_debug.get('shape', []))} "
                 f"min={depth_debug.get('min', 0.0):.4f} "
                 f"max={depth_debug.get('max', 0.0):.4f} "
@@ -137,7 +166,7 @@ def estimate_pose_for_image_chunk(
                 f"center={depth_debug.get('center', 0.0):.4f}"
             )
         else:
-            print(f"[depth] units={da_output_data.get('depth_units', 'm')} no finite values")
+            print(f"[depth] units={depth_output_data.get('depth_units', 'm')} no finite values")
 
     if depth_debug_image_path:
         try:
@@ -153,7 +182,7 @@ def estimate_pose_for_image_chunk(
     runner = _get_foundationpose_runner(foundationpose_env)
     input_data = {
         "is_first_frame": is_first_frame,
-        "rgb_base64": image_to_base64(chunk.image),
+        "rgb_base64": image_base64,
         "depth_npy_path": depth_npy_path,
         "mask_base64": mask_base64,
         "unposed_mesh_path": str(unposed_mesh_path),
