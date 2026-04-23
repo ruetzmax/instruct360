@@ -82,6 +82,9 @@ def main():
 		raise ValueError("Missing required field: f_px")
 
 	f_px = float(f_px)
+	f_px_tensor = torch.tensor([f_px], dtype=torch.float32)
+	if torch.cuda.is_available():
+		f_px_tensor = f_px_tensor.cuda()
 	checkpoint_path = _find_depth_pro_checkpoint(input_data)
 	_stage_checkpoint_for_depth_pro(checkpoint_path)
 
@@ -99,7 +102,7 @@ def main():
 	if torch.cuda.is_available():
 		transformed_image = transformed_image.cuda()
 
-	prediction = model.infer(transformed_image, f_px=f_px)
+	prediction = model.infer(transformed_image, f_px=f_px_tensor)
 	depth = prediction["depth"]
 
 	if torch.is_tensor(depth):
