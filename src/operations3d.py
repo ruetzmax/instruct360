@@ -274,18 +274,18 @@ def adjust_transforms_by_chunk_rotation(
 ):
     angle_horizontal_rad, angle_vertical_rad = chunk.angle
 
-    # horizontal angle rotates around Y-axis
+    # horizontal angle rotates around Z-axis
     rotation_yaw = np.array([
-        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
-        [0, 1, 0],
-        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
+        [np.cos(angle_horizontal_rad), -np.sin(angle_horizontal_rad), 0],
+        [np.sin(angle_horizontal_rad), np.cos(angle_horizontal_rad), 0],
+        [0, 0, 1]
     ])
     
-    # vertical angle rotates around X-axis
+    # vertical angle rotates around X-axis (inverted direction)
     rotation_pitch = np.array([
         [1, 0, 0],
-        [0, np.cos(angle_vertical_rad), -np.sin(angle_vertical_rad)],
-        [0, np.sin(angle_vertical_rad), np.cos(angle_vertical_rad)]
+        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
+        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
     ])
     
     chunk_rotation = rotation_pitch @ rotation_yaw
