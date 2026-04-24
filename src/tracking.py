@@ -248,7 +248,7 @@ def track_object_poses_for_mesh(
         initial_seach_line_length=30,
         mode="RAPID",
         use_gpu=False,
-        use_kalman=False,
+        use_kalman=True,
         sam3d_to_metric_scale_factor=1.5
     ):
 
@@ -298,7 +298,7 @@ def track_object_poses_for_mesh(
     print(K)
     
     if use_kalman:
-        FPS = 24
+        FPS = 12
         kf = init_kalman(1.0 / FPS)
         
     do_cv_tracking = mode in ["RAPID", "GOS", "OLS"]
@@ -490,7 +490,7 @@ def track_object_poses_for_mesh(
                 unposed_mesh_path=scaled_mesh_path,
                 class_name=class_name,
                 K=K,
-                is_first_frame=True,#frame_idx==1,
+                is_first_frame=True,
                 da_env="da",
                 depth_debug_image_path=os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png") if frame_idx==1 else None,
                 foundationpose_debug_image_path=os.path.join(
