@@ -248,8 +248,8 @@ def track_object_poses_for_mesh(
         initial_seach_line_length=30,
         mode="RAPID",
         use_gpu=False,
-        use_kalman=True,
-        sam3d_to_metric_scale_factor=4.0
+        use_kalman=False,
+        sam3d_to_metric_scale_factor=1.5
     ):
 
     initial_chunk_relative_scale = np.asarray(initial_chunk_relative_scale, dtype=np.float32)
@@ -492,7 +492,7 @@ def track_object_poses_for_mesh(
                 K=K,
                 is_first_frame=True,#frame_idx==1,
                 da_env="da",
-                depth_debug_image_path=None,#os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png"),
+                depth_debug_image_path=os.path.join(depth_debug_dir, f"depth_frame_{frame_idx:06d}.png") if frame_idx==1 else None,
                 foundationpose_debug_image_path=os.path.join(
                     foundationpose_debug_dir,
                     f"pose_frame_{frame_idx:06d}.png",
@@ -501,7 +501,7 @@ def track_object_poses_for_mesh(
             )
 
             # sam3d and foundationpose object scales are not in same system, so there is a scale factor introduced
-            next_translation_chunk *= sam3d_to_metric_scale_factor
+            # next_translation_chunk *= sam3d_to_metric_scale_factor
 
             # rotate pose by -90 degrees around x
             angle_x = np.deg2rad(90.0)
