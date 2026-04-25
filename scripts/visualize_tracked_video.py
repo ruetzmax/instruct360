@@ -101,6 +101,8 @@ def do_visualization(
     show_reconstructed: bool = True,
     show_bboxes: bool = True,
     show_landmarks: bool = True,
+    object_scale: float = 2.0,
+    disable_rotation: bool = False,
 ):
     with open(object_pkl_path, 'rb') as f:
         frames_data = pickle.load(f)
@@ -150,6 +152,8 @@ def do_visualization(
 
                 if class_name is None or bb_centers is None or bb_dimensions is None or bb_poses is None:
                     continue
+
+                bb_dimensions = np.asarray(bb_dimensions, dtype=np.float32) * float(object_scale)
 
                 meshes = get_box_meshes((bb_centers, bb_dimensions, bb_poses))
                 for mesh_idx, mesh in enumerate(meshes):
@@ -221,21 +225,20 @@ def do_visualization(
                 for class_name, meshes_info_list in reconstructed_meshes_data.items():
                     for mesh_info in meshes_info_list:
                         unposed_mesh_path = mesh_info.get('unposed_mesh_path')
-                        scale = np.array(mesh_info.get('scale', [1.0, 1.0, 1.0]))
-                        rotation = np.array(mesh_info.get('rotation'))
+                        scale = np.array(mesh_info.get('scale', [1.0, 1.0, 1.0]), dtype=np.float32) * float(object_scale)
+                        if disable_rotation:
+                            rotation = np.eye(3, dtype=np.float32)
+                        else:
+                            rotation = np.array(mesh_info.get('rotation', np.eye(3, dtype=np.float32)))
                         translation = np.array(mesh_info.get('translation'))
 
                         if unposed_mesh_path and os.path.exists(unposed_mesh_path):
                             try:
                                 unposed_mesh = read_trimesh(unposed_mesh_path)
-                                # adjusted_translation = RECON_YZ_FLIP @ (translation * RECON_TRANSLATION_SCALE)
-                                # adjusted_rotation = RECON_YZ_FLIP @ rotation @ RECON_YZ_FLIP
-                                adjusted_rotation = rotation
-                                adjusted_translation = translation
                                 transformed_mesh = apply_mesh_transforms(
                                     unposed_mesh,
-                                    adjusted_rotation,
-                                    adjusted_translation,
+                                    rotation,
+                                    translation,
                                     scale,
                                 )
                                 open3d_mesh = trimesh_to_open3d(transformed_mesh)
@@ -375,6 +378,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable landmark point-cloud visualization."
     )
+
+    parser.add_argument(
+        "--object_scale",
+        type=float,
+        default=2.0,
+        help="Global scale multiplier for rendered objects."
+    )
+
+    parser.add_argument(
+        "--disable_rotation",
+        action="store_true",
+        help="Disable reconstructed object rotations by using identity rotation."
+    )
     
     args = parser.parse_args()
     do_visualization(
@@ -384,4 +400,6 @@ if __name__ == "__main__":
         show_reconstructed=not args.no_reconstructed,
         show_bboxes=not args.no_bboxes,
         show_landmarks=not args.no_landmarks,
+        object_scale=args.object_scale,
+        disable_rotation=args.disable_rotation,
     )
