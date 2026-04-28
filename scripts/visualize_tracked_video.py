@@ -229,7 +229,7 @@ def do_visualization(
                         if disable_rotation:
                             rotation = np.eye(3, dtype=np.float32)
                         else:
-                            rotation = np.array(mesh_info.get('rotation', np.eye(3, dtype=np.float32)))
+                            rotation = np.array(mesh_info.get('chunk_relative_rotation', np.eye(3, dtype=np.float32)))
                         translation = np.array(mesh_info.get('translation'))
 
                         if unposed_mesh_path and os.path.exists(unposed_mesh_path):
