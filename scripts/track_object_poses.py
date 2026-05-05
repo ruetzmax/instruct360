@@ -65,6 +65,8 @@ def track_object_poses(
 				tracked_chunk_relative_translations,
 				tracked_world_rotations,
 				tracked_world_translations,
+				tracked_world_rotations_kalman,
+				tracked_world_translations_kalman,
 				tracked_image_chunk_centers,
 				tracked_image_chunk_sizes,
 			) = track_object_poses_for_mesh(
@@ -96,6 +98,8 @@ def track_object_poses(
 				'tracked_chunk_relative_translations': tracked_chunk_relative_translations,
 				'tracked_world_rotations': tracked_world_rotations,
 				'tracked_world_translations': tracked_world_translations,
+				'tracked_world_rotations_kalman': tracked_world_rotations_kalman,
+				'tracked_world_translations_kalman': tracked_world_translations_kalman,
 				'tracked_image_chunk_centers': tracked_image_chunk_centers,
 				'tracked_image_chunk_sizes': tracked_image_chunk_sizes,
 			})
@@ -109,6 +113,8 @@ def track_object_poses(
 		tracked_chunk_relative_translations = tracked_mesh['tracked_chunk_relative_translations']
 		tracked_world_rotations = tracked_mesh['tracked_world_rotations']
 		tracked_world_translations = tracked_mesh['tracked_world_translations']
+		tracked_world_rotations_kalman = tracked_mesh['tracked_world_rotations_kalman']
+		tracked_world_translations_kalman = tracked_mesh['tracked_world_translations_kalman']
 		tracked_image_chunk_centers = tracked_mesh['tracked_image_chunk_centers']
 		tracked_image_chunk_sizes = tracked_mesh['tracked_image_chunk_sizes']
 
@@ -147,6 +153,8 @@ def track_object_poses(
 				'scale': tracked_chunk_relative_scales[frame_idx],
 				'rotation': tracked_world_rotations[frame_idx],
 				'translation': tracked_world_translations[frame_idx],
+				'rotation_kalman': tracked_world_rotations_kalman[frame_idx],
+				'translation_kalman': tracked_world_translations_kalman[frame_idx],
 				'chunk_relative_scale': tracked_chunk_relative_scales[frame_idx],
 				'chunk_relative_rotation': tracked_chunk_relative_rotations[frame_idx],
 				'chunk_relative_translation': tracked_chunk_relative_translations[frame_idx],

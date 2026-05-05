@@ -248,7 +248,6 @@ def track_object_poses_for_mesh(
         initial_seach_line_length=30,
         mode="RAPID",
         use_gpu=False,
-        use_kalman=True,
         sam3d_to_metric_scale_factor=1.5
     ):
 
@@ -262,6 +261,8 @@ def track_object_poses_for_mesh(
     tracked_chunk_relative_translations = [initial_chunk_relative_translation]
     tracked_world_rotations = [initial_world_rotation]
     tracked_world_translations = [initial_world_translation]
+    tracked_world_rotations_kalman = []
+    tracked_world_translations_kalman = []
     tracked_image_chunk_centers = [initial_image_chunk_center]
     tracked_image_chunk_sizes = [initial_image_chunk_size]
 
@@ -297,17 +298,23 @@ def track_object_poses_for_mesh(
 
     print(K)
     
-    if use_kalman:
-        FPS = 12
-        kf = init_kalman(1.0 / FPS)
+    FPS = 12
+    kf = init_kalman(1.0 / FPS)
+    initial_world_rotation_kalman, initial_world_translation_kalman = do_kalman_step(
+        kf,
+        initial_world_rotation,
+        initial_world_translation,
+    )
+    tracked_world_rotations_kalman.append(initial_world_rotation_kalman)
+    tracked_world_translations_kalman.append(initial_world_translation_kalman)
         
     do_cv_tracking = mode in ["RAPID", "GOS", "OLS"]
     
     previous_image_chunk = initial_image_chunk
     previous_chunk_relative_rotation = initial_chunk_relative_rotation
     previous_chunk_relative_translation = initial_chunk_relative_translation
-    previous_world_rotation = initial_world_rotation
-    previous_world_translation = initial_world_translation
+    previous_world_rotation = initial_world_rotation_kalman
+    previous_world_translation = initial_world_translation_kalman
     next_contour_center = None
     rendered_frames = [] if video_output_path else None
     depth_debug_dir = os.path.join("temp", "depth_debug")
@@ -338,6 +345,8 @@ def track_object_poses_for_mesh(
                     tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
                     tracked_world_rotations.append(tracked_world_rotations[-1])
                     tracked_world_translations.append(tracked_world_translations[-1])
+                    tracked_world_rotations_kalman.append(tracked_world_rotations_kalman[-1])
+                    tracked_world_translations_kalman.append(tracked_world_translations_kalman[-1])
                     tracked_image_chunk_centers.append(next_image_chunk.center)
                     tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
                     previous_image_chunk = next_image_chunk
@@ -477,6 +486,8 @@ def track_object_poses_for_mesh(
                 tracked_chunk_relative_translations.append(tracked_chunk_relative_translations[-1])
                 tracked_world_rotations.append(tracked_world_rotations[-1])
                 tracked_world_translations.append(tracked_world_translations[-1])
+                tracked_world_rotations_kalman.append(tracked_world_rotations_kalman[-1])
+                tracked_world_translations_kalman.append(tracked_world_translations_kalman[-1])
                 tracked_image_chunk_centers.append(next_image_chunk.center)
                 tracked_image_chunk_sizes.append(next_image_chunk.image.shape[:2])
                 previous_image_chunk = next_image_chunk
@@ -518,9 +529,12 @@ def track_object_poses_for_mesh(
         next_rotation_world = next_rotation_world[0]
         next_translation_world = next_translation_world[0] 
         
-        #apply kalman filter to world transforms
-        if use_kalman:
-            next_rotation_world, next_translation_world = do_kalman_step(kf, next_rotation_world, next_translation_world)
+        # apply kalman filter to world transforms
+        next_rotation_world_kalman, next_translation_world_kalman = do_kalman_step(
+            kf,
+            next_rotation_world,
+            next_translation_world,
+        )
         
         # store results
         tracked_chunk_relative_scales.append(initial_chunk_relative_scale)
@@ -528,14 +542,16 @@ def track_object_poses_for_mesh(
         tracked_chunk_relative_translations.append(next_translation_chunk)
         tracked_world_rotations.append(next_rotation_world)
         tracked_world_translations.append(next_translation_world)
+        tracked_world_rotations_kalman.append(next_rotation_world_kalman)
+        tracked_world_translations_kalman.append(next_translation_world_kalman)
         tracked_image_chunk_centers.append(next_image_chunk.center)
         tracked_image_chunk_sizes.append(initial_image_chunk_size)
         
         previous_image_chunk = next_image_chunk
         previous_chunk_relative_rotation = next_rotation_chunk
         previous_chunk_relative_translation = next_translation_chunk
-        previous_world_rotation = next_rotation_world
-        previous_world_translation = next_translation_world
+        previous_world_rotation = next_rotation_world_kalman
+        previous_world_translation = next_translation_world_kalman
         
         # visualization
         if video_output_path is not None:
@@ -585,6 +601,8 @@ def track_object_poses_for_mesh(
         tracked_chunk_relative_translations,
         tracked_world_rotations,
         tracked_world_translations,
+        tracked_world_rotations_kalman,
+        tracked_world_translations_kalman,
         tracked_image_chunk_centers,
         tracked_image_chunk_sizes,
     )
