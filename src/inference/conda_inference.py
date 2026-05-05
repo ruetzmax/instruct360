@@ -151,7 +151,14 @@ class CondaInferenceRunner:
         if not os.path.exists(output_json):
             error_msg = (
                 f"{base_name} inference did not produce output file: {output_json}"
+                f"\nReturn code: {result.returncode}"
+                f"\nCommand: {cmd}"
             )
+            try:
+                temp_listing = sorted(os.listdir(os.path.dirname(output_json)))
+                error_msg += f"\nTemp dir contents: {temp_listing}"
+            except Exception:
+                pass
             if result.stderr:
                 error_msg += f"\nStderr: {result.stderr}"
             if result.stdout:
