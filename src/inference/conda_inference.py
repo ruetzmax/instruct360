@@ -148,9 +148,14 @@ class CondaInferenceRunner:
             print(result.stdout)
 
         if not os.path.exists(output_json):
-            raise RuntimeError(
+            error_msg = (
                 f"{base_name} inference did not produce output file: {output_json}"
             )
+            if result.stderr:
+                error_msg += f"\nStderr: {result.stderr}"
+            if result.stdout:
+                error_msg += f"\nStdout: {result.stdout}"
+            raise RuntimeError(error_msg)
         
         # read output
         with open(output_json, 'r') as f:
