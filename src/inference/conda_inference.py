@@ -9,6 +9,7 @@ import queue
 import threading
 import uuid
 import glob
+import shlex
 from pathlib import Path
 from typing import Dict, Any
 
@@ -77,6 +78,23 @@ class CondaInferenceRunner:
         raise RuntimeError(
             "Could not find a conda executable. Set CONDA_EXE or add conda to PATH."
         )
+
+    @staticmethod
+    def _resolve_conda_activation_script(conda_executable: str) -> str:
+        conda_path = Path(conda_executable).resolve()
+        try:
+            conda_base = conda_path.parents[1]
+        except IndexError as exc:
+            raise RuntimeError(
+                f"Could not resolve conda base from executable: {conda_executable}"
+            ) from exc
+
+        conda_sh = conda_base / "etc" / "profile.d" / "conda.sh"
+        if not conda_sh.is_file():
+            raise RuntimeError(
+                f"Could not find conda activation script at: {conda_sh}"
+            )
+        return str(conda_sh)
     
     def run(self, input_data: Dict[str, Any], verbose: bool = True) -> Dict[str, Any]:
         original_env_snapshot = self._capture_conda_environment()
@@ -95,15 +113,18 @@ class CondaInferenceRunner:
         
         # execute command
         conda_executable = self._resolve_conda_executable()
+        conda_sh = self._resolve_conda_activation_script(conda_executable)
         cmd = [
-            conda_executable,
-            "run",
-            "-n",
-            self.env_name,
-            "python",
-            self.script_path,
-            input_json,
-            output_json,
+            "bash",
+            "-lc",
+            " ".join([
+                f"source {shlex.quote(conda_sh)}",
+                f"conda activate {shlex.quote(self.env_name)}",
+                "python",
+                shlex.quote(self.script_path),
+                shlex.quote(input_json),
+                shlex.quote(output_json),
+            ]),
         ]
         
         if verbose:
@@ -179,17 +200,37 @@ class ThreadedCondaInferenceRunner:
             "Could not find a conda executable. Set CONDA_EXE or add conda to PATH."
         )
 
+    @staticmethod
+    def _resolve_conda_activation_script(conda_executable: str) -> str:
+        conda_path = Path(conda_executable).resolve()
+        try:
+            conda_base = conda_path.parents[1]
+        except IndexError as exc:
+            raise RuntimeError(
+                f"Could not resolve conda base from executable: {conda_executable}"
+            ) from exc
+
+        conda_sh = conda_base / "etc" / "profile.d" / "conda.sh"
+        if not conda_sh.is_file():
+            raise RuntimeError(
+                f"Could not find conda activation script at: {conda_sh}"
+            )
+        return str(conda_sh)
+
     def _resolve_env_python_executable(self) -> str:
         conda_executable = self._resolve_conda_executable()
+        conda_sh = self._resolve_conda_activation_script(conda_executable)
 
         probe_cmd = [
-            conda_executable,
-            "run",
-            "-n",
-            self.env_name,
-            "python",
-            "-c",
-            "import sys; print(sys.executable)",
+            "bash",
+            "-lc",
+            " ".join([
+                f"source {shlex.quote(conda_sh)}",
+                f"conda activate {shlex.quote(self.env_name)}",
+                "python",
+                "-c",
+                shlex.quote("import sys; print(sys.executable)"),
+            ]),
         ]
 
         try:
