@@ -243,6 +243,35 @@ class ThreadedCondaInferenceRunner:
         except Exception:
             pass
 
+        try:
+            info_cmd = [
+                conda_executable,
+                "info",
+                "--envs",
+                "--json",
+            ]
+            info = subprocess.run(info_cmd, capture_output=True, text=True, check=True)
+            info_data = json.loads(info.stdout or "{}")
+            envs = info_data.get("envs", [])
+            for env_path in envs:
+                if os.path.basename(env_path) == self.env_name:
+                    candidate = os.path.join(env_path, "bin", "python")
+                    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                        return candidate
+        except Exception:
+            pass
+
+        try:
+            base_cmd = [
+                conda_executable,
+                "info",
+                "--base",
+            ]
+            base = subprocess.run(base_cmd, capture_output=True, text=True, check=True)
+            conda_base = base.stdout.strip()
+        except Exception:
+            conda_base = None
+
         home = Path.home()
         fallback_candidates = [
             home / "miniconda3" / "envs" / self.env_name / "bin" / "python",
@@ -251,6 +280,10 @@ class ThreadedCondaInferenceRunner:
             home / "miniforge3" / "envs" / self.env_name / "bin" / "python",
             Path("/opt/conda/envs") / self.env_name / "bin" / "python",
         ]
+        if conda_base:
+            fallback_candidates.insert(
+                0, Path(conda_base) / "envs" / self.env_name / "bin" / "python"
+            )
         for candidate in fallback_candidates:
             candidate_str = str(candidate)
             if os.path.isfile(candidate_str) and os.access(candidate_str, os.X_OK):
