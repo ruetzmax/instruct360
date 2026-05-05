@@ -100,10 +100,11 @@ class CondaInferenceRunner:
         original_env_snapshot = self._capture_conda_environment()
 
         # write input data
-        os.makedirs(self.temp_dir, exist_ok=True)
+        temp_dir = os.path.abspath(self.temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)
         base_name = self.script_name.replace("_inference.py", "").replace(".py", "")
-        input_json = os.path.join(self.temp_dir, f"{base_name}_input.json")
-        output_json = os.path.join(self.temp_dir, f"{base_name}_output.json")
+        input_json = os.path.join(temp_dir, f"{base_name}_input.json")
+        output_json = os.path.join(temp_dir, f"{base_name}_output.json")
         
         with open(input_json, 'w') as f:
             json.dump(input_data, f)
@@ -448,11 +449,12 @@ class ThreadedCondaInferenceRunner:
     def run(self, input_data: Dict[str, Any], verbose: bool = True) -> Dict[str, Any]:
         self._ensure_started()
 
-        os.makedirs(self.temp_dir, exist_ok=True)
+        temp_dir = os.path.abspath(self.temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)
         base_name = self.worker_script_name.replace("_worker.py", "").replace(".py", "")
         request_id = uuid.uuid4().hex
-        input_json = os.path.join(self.temp_dir, f"{base_name}_{request_id}_input.json")
-        output_json = os.path.join(self.temp_dir, f"{base_name}_{request_id}_output.json")
+        input_json = os.path.join(temp_dir, f"{base_name}_{request_id}_input.json")
+        output_json = os.path.join(temp_dir, f"{base_name}_{request_id}_output.json")
 
         with open(input_json, "w") as f:
             json.dump(input_data, f)
