@@ -118,13 +118,15 @@ class CondaInferenceRunner:
         cmd = [
             "bash",
             "-lc",
-            " ".join([
+            " && ".join([
                 f"source {shlex.quote(conda_sh)}",
                 f"conda activate {shlex.quote(self.env_name)}",
-                "python",
-                shlex.quote(self.script_path),
-                shlex.quote(input_json),
-                shlex.quote(output_json),
+                " ".join([
+                    "python",
+                    shlex.quote(self.script_path),
+                    shlex.quote(input_json),
+                    shlex.quote(output_json),
+                ]),
             ]),
         ]
         
@@ -237,12 +239,14 @@ class ThreadedCondaInferenceRunner:
         probe_cmd = [
             "bash",
             "-lc",
-            " ".join([
+            " && ".join([
                 f"source {shlex.quote(conda_sh)}",
                 f"conda activate {shlex.quote(self.env_name)}",
-                "python",
-                "-c",
-                shlex.quote("import sys; print(sys.executable)"),
+                " ".join([
+                    "python",
+                    "-c",
+                    shlex.quote("import sys; print(sys.executable)"),
+                ]),
             ]),
         ]
 
