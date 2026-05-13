@@ -133,7 +133,7 @@ def convert_pkl_to_json(input_path, output_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Convert a tracked pose pickle into a JSON file with camera pose and reconstructed mesh metadata.'
+        description='Convert a tracked pose pickle into a JSON file with camera pose and reconstructed mesh metadata for playback in the Unity app.'
     )
     parser.add_argument('--input', type=Path, help='Path to the input .pkl file')
     parser.add_argument(

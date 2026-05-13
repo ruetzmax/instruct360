@@ -9,3 +9,5 @@ ov-seg
 sam3
 FoundationPose
 ml-depth-pro
+checkpoints
+.vscode

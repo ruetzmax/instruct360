@@ -2,7 +2,6 @@ from pathlib import Path
 import pickle
 import sys
 import argparse
-import trimesh
 import numpy as np
 
 
@@ -45,7 +44,6 @@ def reconstruct_meshes(
             frame,
             class_name,
             generate_texture=generate_texture,
-            use_gpu=True,
         )
         
         if not unposed_meshes:
@@ -140,7 +138,7 @@ def main():
         description="Reconstruct and combine meshes from video frames for specific object classes"
     )
     parser.add_argument(
-        "--video-path",
+        "--input_video",
         type=str,
         required=True,
         help="Path to the input video file"
@@ -153,7 +151,7 @@ def main():
         help="List of object class names to reconstruct (e.g., 'chair' 'table')"
     )
     parser.add_argument(
-        "--output-dir",
+        "--output_dir",
         type=str,
         required=True,
         help="Directory to save the output PLY file"
@@ -169,13 +167,13 @@ def main():
         help="Path to save the output pickle file with mesh paths"
     )
     parser.add_argument(
-        "--frame-index",
+        "--frame_index",
         type=int,
         default=0,
         help="Index of the frame to process (default: 0)"
     )
     parser.add_argument(
-        "--generate-texture",
+        "--generate_texture",
         "--textured-mesh",
         dest="generate_texture",
         action="store_true",
@@ -186,7 +184,7 @@ def main():
     args = parser.parse_args()
         
     reconstruct_meshes(
-        video_path=args.video_path,
+        video_path=args.input_video,
         classes=args.classes,
         output_dir=args.output_dir,
         frame_index=args.frame_index,

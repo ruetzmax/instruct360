@@ -1,8 +1,6 @@
 import os
-import subprocess
 import numpy as np
 from typing import Tuple
-from PIL import Image
 from py360convert import e2p
 
 from src.inference.conda_inference import CondaInferenceRunner, ThreadedCondaInferenceRunner
@@ -65,15 +63,6 @@ class ImageChunk:
 
         return cls(image=image_chunk, center=chunk_center_normalized, angle=angle, fov=fov)
 
-
-def find_similar_image_chunk(image_chunk: ImageChunk, candidate_chunks, threshold: float = 0.05):
-    target_center = np.asarray(image_chunk.center, dtype=np.float32)
-    for candidate_chunk in candidate_chunks:
-        candidate_center = np.asarray(candidate_chunk.center, dtype=np.float32)
-        if np.linalg.norm(candidate_center - target_center) < threshold:
-            return candidate_chunk
-    return None
-
 def find_closest_image_chunk(image_chunk: ImageChunk, candidate_chunks):
     target_center = np.asarray(image_chunk.center, dtype=np.float32)
     closest_chunk = None
@@ -86,25 +75,7 @@ def find_closest_image_chunk(image_chunk: ImageChunk, candidate_chunks):
             closest_chunk = candidate_chunk
     return closest_chunk
 
-
-_dino_runner = None
-_ovseg_runner = None
 _sam3_runner = None
-
-
-def _get_dino_runner(env_name="grounding_dino"):
-    global _dino_runner
-    if _dino_runner is None:
-        _dino_runner = ThreadedCondaInferenceRunner(env_name, "dino_worker.py")
-    return _dino_runner
-
-
-def _get_ovseg_runner(env_name="ovseg"):
-    global _ovseg_runner
-    if _ovseg_runner is None:
-        _ovseg_runner = ThreadedCondaInferenceRunner(env_name, "ovseg_worker.py")
-    return _ovseg_runner
-
 
 def _get_sam3_runner(env_name="sam3d-objects", is_threaded=True):
     global _sam3_runner
@@ -115,70 +86,28 @@ def _get_sam3_runner(env_name="sam3d-objects", is_threaded=True):
             _sam3_runner = CondaInferenceRunner(env_name, "sam3_inference.py")
 
     return _sam3_runner
-
-# see: https://github.com/peterbraden/insv-to-yt, https://www.arj.no/2025/12/19/insta360-to-equirectangular/
-def insv_to_equirect(left_video_path, right_video_path, output_video_path, stitched_path="temp/stitched.mp4"):
-    if not os.path.exists(left_video_path):
-        raise FileNotFoundError(f"File not found: {left_video_path}")
-    if not os.path.exists(right_video_path):
-        raise FileNotFoundError(f"File not found: {right_video_path}")
-    
-    # stitch both videos side by side
-    stitch_cmd = [
-        "ffmpeg",
-        "-i", "left_video_path",
-        "-i", "right_video_path",
-        "-filter_complex", "[0:v][1:v]hstack=inputs=2[v]; [0:a][1:a]amerge[a]"
-        "-map", "[v]",
-        "-map", "[a]",
-        "-ac", "2",
-        stitched_path
-    ]
-    subprocess.run(stitch_cmd, check=True)
-    
-    # convert to equirect
-    undistort_cmd = [
-        "ffmpeg",
-        "-i", stitched_path,
-        "-vf", "v360=dfisheye:e:yaw=-90",
-        output_video_path
-    ]
-    subprocess.run(undistort_cmd, check=True)
-    print(f"Saved equirectangular video to: {output_video_path}")
     
 
 def get_2d_bounding_boxes(
     image,
     prompt,
     threshold=0.35,
-    use_gpu=False,
-    dino_env="grounding_dino",
     sam3_env="sam3",
     use_persistent_runner=True
 ):
-    if use_gpu:
-        threshold = 0.7
-        runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner)
-        input_data = {
-            "chunk_images_base64": [image_to_base64(image)],
-            "prompt": prompt,
-            "box_threshold": threshold,
-        }
-        output_data = runner.run(input_data)
-        boxes_for_image = output_data.get("boxes", [[]])[0]
-        if not boxes_for_image:
-            return np.empty((0, 4), dtype=np.float32)
-        return np.array(boxes_for_image, dtype=np.float32)
-
-    runner = _get_dino_runner(dino_env)
+    threshold = 0.7
+    runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner)
     input_data = {
-        "image_base64": image_to_base64(image),
+        "chunk_images_base64": [image_to_base64(image)],
         "prompt": prompt,
         "box_threshold": threshold,
-        "text_threshold": 0.25,
     }
     output_data = runner.run(input_data)
-    return np.array(output_data["boxes"])
+    boxes_for_image = output_data.get("boxes", [[]])[0]
+    if not boxes_for_image:
+        return np.empty((0, 4), dtype=np.float32)
+    return np.array(boxes_for_image, dtype=np.float32)
+
 
 def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700), orientation='vertical'):
     # create an ImageChunk for each bounding box
@@ -197,18 +126,13 @@ def bounding_boxes_to_image_chunks(image, bounding_boxes, chunk_size=(700, 700),
     
     return image_chunks
 
-def image_chunk_from_undistorted(image: np.array):
-    return ImageChunk(image=image, center=(0.5, 0.5), angle=(0.0, 0.0), fov=(117, 117)) #using specs of OnePlus 7 Pro
-
 def get_masks_from_image_chunks(
     image_chunks,
     prompt,
-    use_gpu=False,
-    ovseg_env="ovseg",
     sam3_env="sam3",
     use_persistent_runner=True
 ):
-    runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner) if use_gpu else _get_ovseg_runner(ovseg_env)
+    runner = _get_sam3_runner(sam3_env, is_threaded=use_persistent_runner)
     
     input_data = {
         "chunk_images_base64": [image_to_base64(chunk.image) for chunk in image_chunks],

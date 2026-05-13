@@ -1,22 +1,11 @@
 import cv2 as cv
-import matplotlib.pyplot as plt
 import open3d
-import torch
-from torchvision.ops import box_convert
 import numpy as np
-import base64
-import sys
 import os
 
 import trimesh
 
-from src.operations2d import ImageChunk, insv_to_equirect    
-
-from open3d.visualization import draw_geometries
-
-import plotly.graph_objects as go
-
-
+from src.operations2d import insv_to_equirect    
 
 def normalize_rotation_matrix(rotation_matrix):
     rotation = np.asarray(rotation_matrix, dtype=np.float32)
@@ -106,61 +95,6 @@ def read_video_frames(video_path=None, left_video_path=None, right_video_path=No
         last_frame = cv.cvtColor(last_frame, cv.COLOR_BGR2RGB)
         frames.append(last_frame)
     return frames
-
-def draw_bounding_box(image, box, color=(255, 0, 0), thickness=2):
-    #convert [0,1] (cx,cy,w,h) -> pixel (x1,y1,x2,y2)
-    h, w, _ = image.shape
-    box = box * [w, h, w, h]
-    box_tensor = torch.tensor(box) if not isinstance(box, torch.Tensor) else box
-    box = box_convert(box_tensor, in_fmt="cxcywh", out_fmt="xyxy")
-    
-    x1, y1, x2, y2 = map(int, box)
-    image_with_box = image.copy()
-    cv.rectangle(image_with_box, (x1, y1), (x2, y2), color, thickness)
-    return image_with_box
-
-def draw_bounding_boxes(image, boxes, color=(255, 0, 0), thickness=2):
-    image_with_boxes = image.copy()
-    for box in boxes:
-        image_with_boxes = draw_bounding_box(image_with_boxes, box, color=color, thickness=thickness)
-    return image_with_boxes
-
-def draw_3d_bounding_boxes(chunk: ImageChunk, centers, dimensions, poses):
-    
-    ovmono_path = os.path.join(os.getcwd(), 'ovmono3d')
-    if ovmono_path not in sys.path:
-        sys.path.insert(0, ovmono_path)
-
-    from ovmono3d.cubercnn import util, vis
-    from src.operations3d import get_intrinsics_for_chunk
-    
-    boxes = []
-    for bb_idx in range(len(centers)):
-        center = centers[bb_idx].flatten().tolist() if isinstance(centers[bb_idx], np.ndarray) else list(centers[bb_idx])
-        dimension = dimensions[bb_idx].flatten().tolist() if isinstance(dimensions[bb_idx], np.ndarray) else list(dimensions[bb_idx])
-        bbox3D = center + dimension
-        
-        pose = poses[bb_idx]
-        if isinstance(pose, np.ndarray):
-            pose = np.squeeze(pose).tolist()
-        
-        color = [c/255.0 for c in util.get_color(bb_idx)]
-        box_mesh = util.mesh_cuboid(bbox3D, pose, color=color)
-        boxes.append(box_mesh)
-        
-    K = get_intrinsics_for_chunk(chunk)
-    
-    image = chunk.image
-    
-    im_drawn_rgb, im_topdown, _ = vis.draw_scene_view(image, K, boxes, text=None, scale=image.shape[0], blend_weight=0.5, blend_weight_overlay=0.85)
-    im_drawn_rgb = np.clip(im_drawn_rgb, 0, 255).astype(np.uint8)
-    
-    return im_drawn_rgb
-    
-def display_image(image):    
-    plt.imshow(image)
-    plt.axis('off')
-    plt.show()
     
 def get_character_placeholder(scale = 0.5):
     # get open3d mesh of rectangular character placeholder
@@ -178,90 +112,6 @@ def get_character_placeholder(scale = 0.5):
     character_placeholder.paint_uniform_color([0.0, 0.0, 0.0])
     
     return character_placeholder
-
-def get_color_by_index(index):
-    color = util.get_color(index)
-    return [c / 255.0 for c in color]
-
-def mesh_to_dict(mesh):
-    mesh_dict = {
-        'vertices': np.asarray(mesh.vertices),
-        'faces': np.asarray(mesh.triangles)
-    }
-    
-    if mesh.has_vertex_colors():
-        mesh_dict['colors'] = np.asarray(mesh.vertex_colors)
-    else:
-        mesh_dict['colors'] = None
-        
-    return mesh_dict
-
-
-def dict_to_mesh(mesh_dict):
-    mesh = open3d.geometry.TriangleMesh()
-    mesh.vertices = open3d.utility.Vector3dVector(mesh_dict['vertices'])
-    
-    faces = np.asarray(mesh_dict['faces'])
-    mesh.triangles = open3d.utility.Vector3iVector(faces)
-    
-    if mesh_dict.get('colors') is not None:
-        mesh.vertex_colors = open3d.utility.Vector3dVector(mesh_dict['colors'])
-    
-    mesh.compute_vertex_normals()
-    
-    return mesh
-
-    
-def _mesh_to_plotly(mesh):
-    # transpose z and y axes and flip y to match Open3D coords
-    mesh.vertices = open3d.utility.Vector3dVector(np.asarray(mesh.vertices)[:, [0, 2, 1]] * [1, -1, 1])
-    
-    triangles = np.asarray(mesh.triangles)
-    vertices = np.asarray(mesh.vertices)
-    colors = np.asarray(mesh.vertex_colors)
-    
-    plotly_mesh = go.Mesh3d(
-            x=vertices[:,0],
-            y=vertices[:,1],
-            z=vertices[:,2],
-            i=triangles[:,0],
-            j=triangles[:,1],
-            k=triangles[:,2],
-            vertexcolor=colors,
-            opacity=0.50)
-    
-    return plotly_mesh
-
-def render_scene(meshes):
-    plotly_meshes = [_mesh_to_plotly(mesh) for mesh in meshes]
-    fig = go.Figure(
-        data=[*plotly_meshes],
-        layout=dict(
-            scene=dict(
-                aspectmode='data',
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                zaxis=dict(visible=False)
-            )
-        )
-    )
-    fig.show()
-        
-def pointcloud_to_mesh(pointcloud, color=(0.5, 0.5, 0.5)):
-    if isinstance(pointcloud, open3d.geometry.PointCloud):
-        pcd = pointcloud
-    else:
-        pcd = open3d.geometry.PointCloud()
-        pcd.points = open3d.utility.Vector3dVector(pointcloud)
-    pcd.paint_uniform_color(color)
-    
-    distances = pcd.compute_nearest_neighbor_distance()
-    avg_distance = np.mean(distances)
-    radius = avg_distance * 1.5
-    
-    mesh = open3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(pcd, open3d.utility.DoubleVector([radius, radius * 2]))
-    
-    return mesh
 
 
 def read_trimesh(mesh_or_path):
@@ -285,42 +135,6 @@ def read_trimesh(mesh_or_path):
         raise TypeError(f"Expected trimesh.Trimesh or trimesh.Scene, got {type(mesh)}")
 
     return mesh
-
-
-_TRIMESH_TO_OPENCV_AXIS_MAP = np.array([
-    [1.0, 0.0, 0.0],
-    [0.0, 0.0, -1.0],
-    [0.0, -1.0, 0.0],
-], dtype=np.float32)
-
-# convert GLTF system (x left, y up, z forward) to OpenCV system (x right, y down, z forward)
-def trimesh_to_opencv(mesh_or_path, rotation_matrix, translation_vector):
-    mesh = read_trimesh(mesh_or_path)
-    vertices_src = np.asarray(mesh.vertices, dtype=np.float32)
-    faces = np.asarray(mesh.faces, dtype=np.int32)
-
-    mapping = _TRIMESH_TO_OPENCV_AXIS_MAP.copy()
-    vertices_cv = (vertices_src @ mapping.T).astype(np.float32)
-
-    rotation_src = normalize_rotation_matrix(rotation_matrix)
-    translation_src = normalize_translation_vector(translation_vector)
-
-    rotation_cv = (mapping @ rotation_src @ mapping.T).astype(np.float32)
-    translation_cv = (mapping @ translation_src).astype(np.float32).reshape(3, 1)
-
-    return vertices_cv, faces, rotation_cv, translation_cv
-
-
-def opencv_to_trimesh_pose(rotation_matrix_cv, translation_vector_cv):
-    mapping = _TRIMESH_TO_OPENCV_AXIS_MAP.copy()
-    rotation_cv = normalize_rotation_matrix(rotation_matrix_cv)
-    translation_cv = normalize_translation_vector(translation_vector_cv)
-
-    rotation_src = (mapping.T @ rotation_cv @ mapping).astype(np.float32)
-    translation_src = (mapping.T @ translation_cv).astype(np.float32)
-
-    return rotation_src, translation_src
-
 
 def trimesh_to_open3d(mesh):
     mesh = read_trimesh(mesh)
@@ -366,28 +180,6 @@ def trimesh_to_open3d(mesh):
         o3d_mesh.vertex_colors = open3d.utility.Vector3dVector(vertex_colors)
 
     o3d_mesh.compute_vertex_normals()
-    
-    # rot_90_x = open3d.geometry.get_rotation_matrix_from_axis_angle([np.pi / 2, 0.0, 0.0])
-    # o3d_mesh.rotate(rot_90_x, center=[0.0, 0.0, 0.0])
                                     
     return o3d_mesh
-
-def render_contour_with_correspondences(image, contour_points_2d, correspondences_2d=None, center_2d=None, bundle_src_locations=None):
-    overlay = image.copy()
-    contour = contour_points_2d.reshape(-1, 2).astype(np.int32)
-    cv.polylines(overlay, [contour], isClosed=True, color=(255, 0, 0), thickness=2)
-    for pt in contour:
-        cv.circle(overlay, tuple(pt), 2, (0, 255, 255), -1)
-    if center_2d is not None:
-        cv.circle(overlay, tuple(np.asarray(center_2d, dtype=int)), 5, (0, 0, 255), -1)
-    if bundle_src_locations is not None:
-        overlay = cv.rapid.drawSearchLines(
-            overlay,
-            bundle_src_locations,
-            (255, 0, 255)
-        )
-    if correspondences_2d is not None:
-        for pt in correspondences_2d.reshape(-1, 2).astype(np.int32):
-            cv.circle(overlay, tuple(pt), 2, (0, 255, 255), -1)
-    return overlay
     

@@ -13,12 +13,8 @@ def track_object_poses(
 	input_pkl_path,
 	classes,
 	output_pkl_path=None,
-	video_output_path=None,
-	mode="RAPID",
-	num_contour_points=100,
-	search_line_length=10,
-	initial_search_line_length=30,
-	use_gpu=False
+	image_chunk_size=(300, 300),
+	fps=24,
 ):
 	with open(input_pkl_path, 'rb') as f:
 		frames_data = pickle.load(f)
@@ -79,15 +75,10 @@ def track_object_poses(
 				initial_world_rotation=mesh_data['rotation'],
 				initial_world_translation=mesh_data['translation'],
 				initial_image_chunk_center=mesh_data['image_chunk_center'],
-				initial_image_chunk_size=mesh_data['image_chunk_size'],
+				initial_image_chunk_size=image_chunk_size,
 				frame_camera_translations=frame_camera_translations,
 				frame_camera_rotations=frame_camera_rotations,
-				video_output_path=video_output_path,
-				num_contour_points=num_contour_points,
-				search_line_length=search_line_length,
-				initial_seach_line_length=initial_search_line_length,
-				mode=mode,
-				use_gpu=use_gpu,
+				fps=fps,
 			)
 
 			tracked_results.append({
@@ -211,39 +202,17 @@ if __name__ == "__main__":
 		help="Path to save the output pickle file with tracked object poses"
 	)
 	parser.add_argument(
-		"--video_output_path",
-		type=str,
-		help="Path to save the output video with contour/correspondence visualizations (mp4)"
-	)
-	parser.add_argument(
-		"--mode",
-		type=str,
-		default="RAPID",
-		help="Tracking mode to use: RAPID, OLS, GOS, FP"
-	)
-	parser.add_argument(
-		"--num_contour_points",
+		"--image_chunk_size",
 		type=int,
-		default=100,
-		help="Number of contour points (default: 100)"
+		nargs=2,
+		default=[300, 300],
+		help="Image chunk size as two integers: width height"
 	)
 	parser.add_argument(
-		"--search_line_length",
+		"--fps",
 		type=int,
-		default=10,
-		help="Search line length (default: 10)"
-	)
-	parser.add_argument(
-			"--initial_search_line_length",
-			type=int,
-			default=30,
-			help="Initial search line length (default: 30)"
-		)
-	parser.add_argument(
-		"--use_gpu",
-		type=bool,
-		default=False,
-		help="Enable or disable GPU"
+		default=24,
+		help="Video"
 	)
 
 	args = parser.parse_args()
@@ -253,10 +222,6 @@ if __name__ == "__main__":
 		args.input_pkl,
 		args.classes,
 		args.output_pkl,
-		args.video_output_path,
-		mode=args.mode,
-		num_contour_points=args.num_contour_points,
-		search_line_length=args.search_line_length,
-		initial_search_line_length=args.initial_search_line_length,
-		use_gpu=args.use_gpu
+		image_chunk_size=tuple(args.image_chunk_size),
+		fps=args.fps,
 	)

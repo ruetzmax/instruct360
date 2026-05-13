@@ -1,31 +1,25 @@
 # About
-Reconstruct scene information from omnidirectional video input. Pipeline allows for execution of arbitrary operations (=payloads) on perspective images of objects of interest, taken from the panorama. Multiple payloads are available. Ovmono extracts 3d bounding boxes for arbitrary classes. Sam3D reconstructs object meshes.
+Pipeline for object capturing from omnidirectional / 360 degree input videos. Includes camera pose tracking, mesh reconstruction and pose estimation.
 
 # Setup
 1. Clone the repo and cd into it
 2. `conda create -n instruct360 python=3.11.0 && conda activate instruct360`
 3. `pip install -r requirements.txt` 
-4. Follow the [Ovmono3D installation instructions](https://github.com/UVA-Computer-Vision-Lab/ovmono3d/tree/main?tab=readme-ov-file#installation-) inside of the root folder. (For CPU execution, use [this fork](https://github.com/ruetzmax/ovmono3d) instead)
-5. Follow the [GroundingDINO installation instructions](https://github.com/IDEA-Research/GroundingDINO?tab=readme-ov-file#hammer_and_wrench-install) inside of the root folder and inside a conda env called "grounding_dino. 
-<!-- 4. Install [cuda toolkit 11.3](https://developer.nvidia.com/cuda-11.3.0-download-archive) -->
-6. Install [ov-seg](https://github.com/facebookresearch/ov-seg) and place the pretrained weights inside the ov-seg/checkpoints folder
-7. Install [sam3d](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md) in a separate conda env "sam3d-objects" but clone it into the project root
-8. Install [FoundationPose](https://github.com/NVlabs/FoundationPose/tree/main?tab=readme-ov-file#env-setup-option-2-conda-experimental) inside of the root folder and inside a conda env called "foundationpose".
+4. Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
+5. Multiple foundation models will be executed during the pipeline. To avoid dependency conflicts, each model has to be installed in a separate virtual environment. Pay attention to the required CUDA versions (can be different for each environment). To use a different CUDA version, install it from the [Cuda Toolkit Archive](https://developer.nvidia.com/cuda-toolkit-archive) using a runfile to a specific folder (`sudo sh cuda_runfile.run --silent --toolkit --toolkitpath=/your/cuda/path`). To tell the conda environment which version to use, set the following env vars: `conda env config vars set CUDA_HOME=/your/cuda/path && conda env config vars set PATH=$CUDA_HOME/bin:$PATH && conda env config vars set LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH`. Clone each of the following projects into the root of this repository and install them as per their respective instructions: 
+    - [SAM3](https://github.com/facebookresearch/sam3#installation)
+    - [SAM3D Objects](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md)
+    - [Depth Pro](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md)
+    - [FoundationPose](https://github.com/NVlabs/FoundationPose#env-setup-option-2-conda-local)
 
-OPTIONAL - for SLAM / camera postion tracking
-- Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
 
-Possible Errors:
--  `ImportError: libtiff.so.5: cannot open shared object file...` ensure that libtiff is installed and downgrade PIL `pip install pillow==9.5.0"
--  you may need to installed opencv / additional packages in the respective payload environments
+# Running the pipeline
+Running the pipeline is a multi-step process. The intermediate results will be passed between stages as a .pkl file.
+1. Perform ORB SLAM camera pose and landmark tracking: `python scripts/track_camera_poses.py --input_video vids/demo.mp4 --output_pkl output/results.pkl`
+2. Perform mesh reconstruction: `python scripts/reconstruct_meshes.py --input_video vids/demo.mp4 --classes "book" "kettle" --output_dir output/reconstructed_meshes --input_pkl output/results.pkl`
+3. Perform pose estimation: `python scripts/track_object_poses.py --input_video vids/demo.mp4 --classes "book" "kettle" --input_pkl  outpu
+t/results.pkl`
 
-# Inference
-To infere 3D object bounding boxes from a video, run:
-`python scripts/track_objects_in_video.py --video_path vids/office.mp4 --classes "cupboard" "cup" "chair" --threshold_2d 0.35 --threshold_3d 0.4 --orientation horizontal --export_meshes True --output output/office_objects.pkl`
-
-To visualize the results, run:
-`python scripts/visualize_tracked_video.py --input output/office_objects.pkl`
-To draw 2d bounding boxes, run:
-`python scripts/visualize_2d_bounding_boxes.py --input_video vids/office.mp4 --object_pkl output/office_objects.pkl --output_video output/boxes2d.mp4`
-To append camera poses to already tracked data (will be automatically considered in visualization), run: 
-`python scripts/append_camera_poses.py --input_video vids/office.mp4 --input_pkl output/office_objects.pkl --output_pkl output/office_objects_with_poses.pkl`
+# Visualizing the results
+For a quick visualization of results in Open3D, run: `python scripts/visualize_tracked_video.py --input output/results.pkl`
+For displaying the objects in the Unity app, a different output format is required. To perform the conversion, run:  `python scripts/pkl_to_json.py --input output/results.pkl --output output/results.json`

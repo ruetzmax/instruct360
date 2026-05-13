@@ -11,22 +11,11 @@ from src.inference.inference_utils import image_to_base64
 import torch
 
 
-_ovmono_runner = None
 _sam3d_runner = None
 _foundationpose_runner = None
-_da_runner = None
 _depth_pro_runner = None
 
 moge_model = None
-
-
-
-def _get_ovmono_runner(env_name="ovmono3d"):
-    global _ovmono_runner
-    if _ovmono_runner is None:
-        _ovmono_runner = CondaInferenceRunner(env_name, "ovmono_inference.py")
-    return _ovmono_runner
-
 
 def _get_sam3d_runner(env_name="sam3d-objects"):
     global _sam3d_runner
@@ -41,37 +30,11 @@ def _get_foundationpose_runner(env_name="instruct360"):
         _foundationpose_runner = ThreadedCondaInferenceRunner(env_name, "foundationpose_worker.py")
     return _foundationpose_runner
 
-
-def _get_da_runner(env_name="instruct360"):
-    global _da_runner
-    if _da_runner is None:
-        _da_runner = CondaInferenceRunner(env_name, "da_worker.py")
-    return _da_runner
-
-
 def _get_depth_pro_runner(env_name="instruct360"):
     global _depth_pro_runner
     if _depth_pro_runner is None:
         _depth_pro_runner = CondaInferenceRunner(env_name, "depth-pro_worker.py")
     return _depth_pro_runner
-        
-
-
-def get_intrinsics_for_chunk(chunk: ImageChunk):
-    fov_x, fov_y = chunk.fov
-    h, w, _ = chunk.image.shape
-    focal_length_x = (w / 2) / np.tan(np.radians(fov_x) / 2)
-    focal_length_y = (h / 2) / np.tan(np.radians(fov_y) / 2)
-    
-    principal_point = (w / 2, h / 2)
-
-    K = np.array([
-        [focal_length_x, 0.0, principal_point[0]], 
-        [0.0, focal_length_y, principal_point[1]], 
-        [0.0, 0.0, 1.0]
-    ])
-    
-    return K
 
 #https://github.com/facebookresearch/sam-3d-objects/issues/144#issuecomment-3835610725
 def estimate_intrinsics_for_chunk(chunk: ImageChunk):
@@ -111,11 +74,8 @@ def estimate_pose_for_image_chunk(
     unposed_mesh_path,
     class_name,
     K,
-    is_first_frame,
     foundationpose_env="foundationpose",
-    da_env="da",
     depth_pro_env="depth-pro",
-    depth_source="depth-pro",
     depth_debug_image_path=None,
     foundationpose_debug_image_path=None,
     foundationpose_debug_level=1,
@@ -125,63 +85,45 @@ def estimate_pose_for_image_chunk(
         depth_npy_path = depth_file.name
 
     image_base64 = image_to_base64(chunk.image)
-    normalized_depth_source = str(depth_source).strip().lower()
 
-    if normalized_depth_source in {"depth-pro", "depth_pro", "depthpro"}:
-        depth_runner = _get_depth_pro_runner(depth_pro_env)
-        fx_px = float(K[0, 0])
-        fy_px = float(K[1, 1])
-        f_px = 0.5 * (fx_px + fy_px)
-        depth_input_data = {
-            "image_base64": image_base64,
-            "depth_npy_path": depth_npy_path,
-            "f_px": f_px,
-        }
-        depth_output_data = depth_runner.run(depth_input_data)
-    elif normalized_depth_source in {"da", "depth-anything", "depth_anything"}:
-        da_runner = _get_da_runner(da_env)
-        da_input_data = {
-            "image_base64": image_base64,
-            "depth_npy_path": depth_npy_path,
-            "hf_device": 0,
-            "depth_units": "m",
-        }
-        depth_output_data = da_runner.run(da_input_data)
-    else:
-        raise ValueError(
-            f"Unsupported depth_source '{depth_source}'. Use 'depth-pro' or 'da'."
-        )
-
-    depth_debug = depth_output_data.get("depth_debug")
-    if isinstance(depth_debug, dict):
-        if depth_debug.get("has_finite"):
-            print(
-                "[depth] "
-                f"units={depth_output_data.get('depth_units', 'm')} "
-                f"shape={tuple(depth_debug.get('shape', []))} "
-                f"min={depth_debug.get('min', 0.0):.4f} "
-                f"max={depth_debug.get('max', 0.0):.4f} "
-                f"mean={depth_debug.get('mean', 0.0):.4f} "
-                f"p50={depth_debug.get('p50', 0.0):.4f} "
-                f"center={depth_debug.get('center', 0.0):.4f}"
-            )
-        else:
-            print(f"[depth] units={depth_output_data.get('depth_units', 'm')} no finite values")
+    depth_runner = _get_depth_pro_runner(depth_pro_env)
+    fx_px = float(K[0, 0])
+    fy_px = float(K[1, 1])
+    f_px = 0.5 * (fx_px + fy_px)
+    depth_input_data = {
+        "image_base64": image_base64,
+        "depth_npy_path": depth_npy_path,
+        "f_px": f_px,
+    }
+    depth_output_data = depth_runner.run(depth_input_data)
 
     if depth_debug_image_path:
+        depth_debug = depth_output_data.get("depth_debug")
+        if isinstance(depth_debug, dict):
+            if depth_debug.get("has_finite"):
+                print(
+                    "[depth] "
+                    f"units={depth_output_data.get('depth_units', 'm')} "
+                    f"shape={tuple(depth_debug.get('shape', []))} "
+                    f"min={depth_debug.get('min', 0.0):.4f} "
+                    f"max={depth_debug.get('max', 0.0):.4f} "
+                    f"mean={depth_debug.get('mean', 0.0):.4f} "
+                    f"p50={depth_debug.get('p50', 0.0):.4f} "
+                    f"center={depth_debug.get('center', 0.0):.4f}"
+                )
+            else:
+                print(f"[depth] units={depth_output_data.get('depth_units', 'm')} no finite values")  
         try:
             write_depth_image(depth_npy_path, depth_debug_image_path)
         except Exception as exc:
             print(f"[depth] failed to write debug image to {depth_debug_image_path}: {exc}")
-
-    mask_base64 = None
-    if is_first_frame:
-        first_frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name, use_gpu=True)[0]
-        mask_base64 = image_to_base64(first_frame_mask)
+    
+    frame_mask = get_masks_from_image_chunks([chunk], prompt=class_name)[0]
+    mask_base64 = image_to_base64(frame_mask)
 
     runner = _get_foundationpose_runner(foundationpose_env)
     input_data = {
-        "is_first_frame": is_first_frame,
+        "is_first_frame": True,
         "rgb_base64": image_base64,
         "depth_npy_path": depth_npy_path,
         "mask_base64": mask_base64,
@@ -200,71 +142,11 @@ def estimate_pose_for_image_chunk(
             os.remove(depth_npy_path)
 
     pose = np.array(output_data["pose"], dtype=np.float32)
-    center_pose = np.array(output_data["center_pose"], dtype=np.float32)
 
     estimated_rotation = pose[:3, :3]
     estimated_translation = pose[:3, 3]
-    center_rotation = center_pose[:3, :3]
-    center_translation = center_pose[:3, 3]
 
     return estimated_rotation, estimated_translation
-
-
-def get_3d_bounding_boxes(chunk: ImageChunk, prompt: str, threshold=0.3, ovmono_env="ovmono3d"):
-    runner = _get_ovmono_runner(ovmono_env)
-    
-    h, w, _ = chunk.image.shape
-    K = get_intrinsics_for_chunk(chunk)
-    
-    input_data = {
-        "image_base64": image_to_base64(chunk.image),
-        "prompt": prompt,
-        "threshold": threshold,
-        "intrinsics": K.tolist(),
-        "height": h,
-        "width": w
-    }
-    
-    output_data = runner.run(input_data)
-    
-    centers = [np.array(c) for c in output_data["centers"]]
-    dimensions = [np.array(d) for d in output_data["dimensions"]]
-    poses = [np.array(p) for p in output_data["poses"]]
-    
-    return centers, dimensions, poses
-        
-def adjust_bounding_boxes_by_chunk_rotation(centers, poses, chunk: ImageChunk):
-    rotated_centers = []
-    rotated_poses = []
-    
-    angle_horizontal_rad, angle_vertical_rad = chunk.angle
-    
-    # horizontal angle rotates around Y-axis
-    rotation_yaw = np.array([
-        [np.cos(angle_horizontal_rad), 0, np.sin(angle_horizontal_rad)],
-        [0, 1, 0],
-        [-np.sin(angle_horizontal_rad), 0, np.cos(angle_horizontal_rad)]
-    ])
-    
-    # vertical angle rotates around X-axis
-    rotation_pitch = np.array([
-        [1, 0, 0],
-        [0, np.cos(-angle_vertical_rad), -np.sin(-angle_vertical_rad)],
-        [0, np.sin(-angle_vertical_rad), np.cos(-angle_vertical_rad)]
-    ])
-    
-    rotation = rotation_pitch @ rotation_yaw
-    
-    for center in centers:
-        rotated_center = rotation @ center.T
-        rotated_centers.append(rotated_center)
-    
-    for pose in poses:
-        pose_array = np.array(pose).reshape(3, 3)
-        rotated_pose = rotation @ pose_array
-        rotated_poses.append(rotated_pose)
-    
-    return rotated_centers, rotated_poses
 
 def adjust_transforms_by_chunk_rotation(
     rotation_matrices,
@@ -308,43 +190,6 @@ def adjust_transforms_by_chunk_rotation(
     
     return adjusted_rotations, adjusted_translations
 
-def adjust_transforms_between_cameras(
-        rotation_matrices,
-        translation_vectors,
-        cam1_translation,
-        cam1_rotation,
-        cam2_translation,
-        cam2_rotation,
-):
-        # camera poses in world frame
-        R_w_c1 = open3d.geometry.get_rotation_matrix_from_quaternion(cam1_rotation)
-        R_w_c2 = open3d.geometry.get_rotation_matrix_from_quaternion(cam2_rotation)
-        t_w_c1 = normalize_translation_vector(cam1_translation)
-        t_w_c2 = normalize_translation_vector(cam2_translation)
-
-        R_c2_w = R_w_c2.T
-
-        adjusted_rotations = []
-        adjusted_translations = []
-
-        for rotation_matrix, translation_vector in zip(rotation_matrices, translation_vectors):
-                R_c1_o = normalize_rotation_matrix(rotation_matrix)
-                t_c1_o = normalize_translation_vector(translation_vector)
-
-                # object pose in world frame
-                R_w_o = R_w_c1 @ R_c1_o
-                t_w_o = R_w_c1 @ t_c1_o + t_w_c1
-
-                # object pose in camera 2 frame
-                R_c2_o = R_c2_w @ R_w_o
-                t_c2_o = R_c2_w @ (t_w_o - t_w_c2)
-
-                adjusted_rotations.append(R_c2_o)
-                adjusted_translations.append(t_c2_o)
-
-        return adjusted_rotations, adjusted_translations
-
-
 def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
     # create copy
     if isinstance(geometry, open3d.geometry.TriangleMesh):
@@ -365,71 +210,6 @@ def adjust_pose_by_camera_pose(geometry, camera_translation, camera_rotation):
     adjusted_geometry.translate(camera_translation)
     
     return adjusted_geometry
-    
-def _create_box_mesh(center, dimensions, pose, color=(0, 0, 255)):
-    # create opencv box mesh
-    center = np.array(center).flatten()
-    dimensions = np.array(dimensions).flatten()
-    pose_matrix = np.array(pose).reshape(3, 3)
-    
-    w, h, d = dimensions
-    vertices_local = np.array([
-        [-w/2, -h/2, -d/2],  # 0: front-bottom-left
-        [ w/2, -h/2, -d/2],  # 1: front-bottom-right
-        [ w/2,  h/2, -d/2],  # 2: front-top-right
-        [-w/2,  h/2, -d/2],  # 3: front-top-left
-        [-w/2, -h/2,  d/2],  # 4: back-bottom-left
-        [ w/2, -h/2,  d/2],  # 5: back-bottom-right
-        [ w/2,  h/2,  d/2],  # 6: back-top-right
-        [-w/2,  h/2,  d/2],  # 7: back-top-left
-    ])
-    
-    vertices = (pose_matrix @ vertices_local.T).T + center
-    
-    # flip x, y and z to match Open3D coordinate system
-    vertices = vertices * [-1, -1, -1]
-    
-    triangles = np.array([
-        # front face
-        [0, 1, 2], [0, 2, 3],
-        # back face
-        [4, 6, 5], [4, 7, 6],
-        # left face
-        [0, 3, 7], [0, 7, 4],
-        # right face
-        [1, 5, 6], [1, 6, 2],
-        # bottom face
-        [0, 4, 5], [0, 5, 1],
-        # top face
-        [3, 2, 6], [3, 6, 7],
-    ])
-    
-    mesh = open3d.geometry.TriangleMesh()
-    mesh.vertices = open3d.utility.Vector3dVector(vertices)
-    mesh.triangles = open3d.utility.Vector3iVector(triangles)
-    
-    color_normalized = np.array(color) / 255.0 if max(color) > 1.0 else np.array(color)
-    mesh.paint_uniform_color(color_normalized)
-    
-    mesh.compute_vertex_normals()
-    
-    return mesh
-
-def get_box_mesh(box, color=(0, 0, 255)):
-    center, dimension, pose = box
-    return _create_box_mesh(center, dimension, pose, color=color)
-
-def get_box_meshes(boxes, color=(0, 0, 255)):
-    centers, dimensions, poses = boxes
-    meshes = []
-    for box_idx in range(len(centers)):
-        center = centers[box_idx]
-        dimension = dimensions[box_idx]
-        pose = poses[box_idx]
-        
-        mesh = _create_box_mesh(center, dimension, pose, color=color)
-        meshes.append(mesh)
-    return meshes
 
 def reconstruct_meshes_for_chunks(
     chunks,
@@ -518,50 +298,3 @@ def sam3d_transforms_to_trimesh(scale_vector, rotation_input, translation_vector
     adjusted_translation = _R_ZUP_TO_YUP @ translation_zup
 
     return scale, adjusted_rotation, adjusted_translation
-
-def pose_trimesh_with_sam3d_transform(mesh, rotation_input, translation_vector, scale_vector=None):
-
-    # Load mesh and ensure we have a Trimesh instance
-    base_mesh = read_trimesh(mesh)
-    if not isinstance(base_mesh, trimesh.Trimesh):
-        raise TypeError(f"Expected trimesh.Trimesh, got {type(base_mesh)}")
-
-    # Axis conversion matrices between Z-up and Y-up
-    _R_ZUP_TO_YUP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float32)
-    _R_YUP_TO_ZUP = _R_ZUP_TO_YUP.T
-
-    # Convert mesh vertices from Y-up to Z-up
-    vertices_yup = np.asarray(base_mesh.vertices, dtype=np.float32)
-    vertices_zup = vertices_yup @ _R_YUP_TO_ZUP
-
-    # Normalize transform inputs (Z-up space)
-    if rotation_input is None:
-        rotation_zup = np.eye(3, dtype=np.float32)
-    else:
-        rotation = np.asarray(rotation_input, dtype=np.float32)
-        flat = rotation.reshape(-1)
-        if flat.size == 4:
-            # Quaternion (w, x, y, z)
-            rotation_zup = open3d.geometry.get_rotation_matrix_from_quaternion(flat.tolist())
-        else:
-            rotation_zup = normalize_rotation_matrix(rotation)
-
-    translation_zup = normalize_translation_vector(translation_vector)
-
-    if scale_vector is None:
-        scale = np.ones(3, dtype=np.float32)
-    else:
-        scale = normalize_scale_vector(scale_vector)
-
-    # Apply scale, then rotation, then translation in Z-up
-    vertices_zup_scaled = vertices_zup * scale[None, :]
-    vertices_zup_rot = (rotation_zup @ vertices_zup_scaled.T).T
-    vertices_zup_posed = vertices_zup_rot + translation_zup[None, :]
-
-    # Convert posed vertices back to Y-up
-    vertices_yup_posed = vertices_zup_posed @ _R_ZUP_TO_YUP
-
-    posed_mesh = base_mesh.copy()
-    posed_mesh.vertices = vertices_yup_posed.astype(np.float32)
-
-    return posed_mesh
