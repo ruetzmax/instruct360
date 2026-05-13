@@ -21,5 +21,5 @@ Running the pipeline is a multi-step process. The intermediate results will be p
 t/results.pkl`
 
 # Visualizing the results
-For a quick visualization of results in Open3D, run: `python scripts/visualize_tracked_video.py --input output/results.pkl`
+For a quick visualization of results in Open3D, run: `python scripts/visualize_tracked_video.py --input output/results.pkl`  
 For displaying the objects in the Unity app, a different output format is required. To perform the conversion, run:  `python scripts/pkl_to_json.py --input output/results.pkl --output output/results.json`
