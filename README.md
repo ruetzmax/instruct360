@@ -17,9 +17,8 @@ Pipeline for object capturing from omnidirectional / 360 degree input videos. In
 Running the pipeline is a multi-step process. The intermediate results will be passed between stages as a .pkl file.
 1. Perform ORB SLAM camera pose and landmark tracking: `python scripts/track_camera_poses.py --input_video vids/demo.mp4 --output_pkl output/results.pkl`
 2. Perform mesh reconstruction: `python scripts/reconstruct_meshes.py --input_video vids/demo.mp4 --classes "book" "kettle" --output_dir output/reconstructed_meshes --input_pkl output/results.pkl`
-3. Perform pose estimation: `python scripts/track_object_poses.py --input_video vids/demo.mp4 --classes "book" "kettle" --input_pkl  outpu
-t/results.pkl`
+3. Perform pose estimation: `python scripts/track_object_poses.py --input_video vids/demo.mp4 --classes "book" "kettle" --input_pkl  output/results.pkl`
 
 # Visualizing the results
-For a quick visualization of results in Open3D, run: `python scripts/visualize_tracked_video.py --input output/results.pkl`
+For a quick visualization of results in Open3D, run: `python scripts/visualize_tracked_video.py --input output/results.pkl`  
 For displaying the objects in the Unity app, a different output format is required. To perform the conversion, run:  `python scripts/pkl_to_json.py --input output/results.pkl --output output/results.json`
