@@ -5,8 +5,6 @@ import os
 
 import trimesh
 
-from src.operations2d import insv_to_equirect    
-
 def normalize_rotation_matrix(rotation_matrix):
     rotation = np.asarray(rotation_matrix, dtype=np.float32)
     if rotation.shape == (3, 3):
@@ -76,13 +74,7 @@ def write_depth_image(depth_npy_path: str, output_path: str):
     cv.imwrite(output_path, debug_image)
 
 
-def read_video_frames(video_path=None, left_video_path=None, right_video_path=None):
-    if not video_path:
-        if not left_video_path or not right_video_path:
-            raise ValueError("Either video_path or both left_video_path and right_video_path must be provided.")
-        video_path = "temp/equirect_input.mp4"
-        insv_to_equirect(left_video_path, right_video_path, video_path)
-    
+def read_video_frames(video_path):
     cap = cv.VideoCapture(video_path)
     if not cap.isOpened():
         print("Cannot open vid")
