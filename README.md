@@ -8,7 +8,7 @@ Pipeline for object capturing from omnidirectional / 360 degree input videos. In
 4. Install [stella_vslam](https://stella-cv.readthedocs.io/en/latest/installation.html)
 5. Multiple foundation models will be executed during the pipeline. To avoid dependency conflicts, each model has to be installed in a separate virtual environment. Pay attention to the required CUDA versions (can be different for each environment). To use a different CUDA version, install it from the [Cuda Toolkit Archive](https://developer.nvidia.com/cuda-toolkit-archive) using a runfile to a specific folder (`sudo sh cuda_runfile.run --silent --toolkit --toolkitpath=/your/cuda/path`). To tell the conda environment which version to use, set the following env vars: `conda env config vars set CUDA_HOME=/your/cuda/path && conda env config vars set PATH=$CUDA_HOME/bin:$PATH && conda env config vars set LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH`. Clone each of the following projects into the root of this repository and install them as per their respective instructions: 
     - [SAM3](https://github.com/facebookresearch/sam3#installation)
-    - [SAM3D Objects](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md)
+    - [SAM3D Objects](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md) (for CUDA 12.8+ use [these instructions](https://github.com/facebookresearch/sam-3d-objects/issues/15#issuecomment-3560650855))
     - [Depth Pro](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md)
     - [FoundationPose](https://github.com/NVlabs/FoundationPose#env-setup-option-2-conda-local)
 
