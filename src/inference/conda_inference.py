@@ -375,10 +375,14 @@ class ThreadedCondaInferenceRunner:
         self._thread = None
 
     def _worker_loop(self):
-        env_python = self._resolve_env_python_executable()
-        worker_env = self._build_worker_env(env_python)
+        conda_executable = self._resolve_conda_executable()
         cmd = [
-            env_python,
+            conda_executable,
+            "run",
+            "-n",
+            self.env_name,
+            "--no-capture-output",
+            "python",
             self.worker_script_path,
             "--persistent",
         ]
@@ -390,7 +394,6 @@ class ThreadedCondaInferenceRunner:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env=worker_env,
         )
 
         try:
