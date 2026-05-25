@@ -1,8 +1,30 @@
 import base64
 import json
+import os
 import sys
-import cv2
 import numpy as np
+
+
+def _augment_ld_library_path():
+    candidate_dirs = [
+        os.path.join(sys.prefix, "lib"),
+        os.path.join(sys.prefix, "lib64"),
+    ]
+
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    existing_parts = [p for p in existing.split(":") if p]
+    merged = []
+    for path in candidate_dirs + existing_parts:
+        if path and os.path.isdir(path) and path not in merged:
+            merged.append(path)
+
+    if merged:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(merged)
+
+
+_augment_ld_library_path()
+
+import cv2
 
 
 def base64_to_image(img_str):
