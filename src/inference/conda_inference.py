@@ -232,135 +232,6 @@ class ThreadedCondaInferenceRunner:
             )
         return str(conda_sh)
 
-    def _resolve_env_python_executable(self) -> str:
-        conda_executable = self._resolve_conda_executable()
-        conda_sh = self._resolve_conda_activation_script(conda_executable)
-
-        probe_cmd = [
-            "bash",
-            "-lc",
-            " && ".join([
-                f"source {shlex.quote(conda_sh)}",
-                f"conda activate {shlex.quote(self.env_name)}",
-                " ".join([
-                    "python",
-                    "-c",
-                    shlex.quote("import sys; print(sys.executable)"),
-                ]),
-            ]),
-        ]
-
-        try:
-            probe = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
-            candidates = [line.strip() for line in probe.stdout.splitlines() if line.strip()]
-            if candidates:
-                python_path = candidates[-1]
-                if os.path.isfile(python_path) and os.access(python_path, os.X_OK):
-                    return python_path
-        except Exception:
-            pass
-
-        try:
-            info_cmd = [
-                conda_executable,
-                "info",
-                "--envs",
-                "--json",
-            ]
-            info = subprocess.run(info_cmd, capture_output=True, text=True, check=True)
-            info_data = json.loads(info.stdout or "{}")
-            envs = info_data.get("envs", [])
-            for env_path in envs:
-                if os.path.basename(env_path) == self.env_name:
-                    candidate = os.path.join(env_path, "bin", "python")
-                    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                        return candidate
-        except Exception:
-            pass
-
-        try:
-            base_cmd = [
-                conda_executable,
-                "info",
-                "--base",
-            ]
-            base = subprocess.run(base_cmd, capture_output=True, text=True, check=True)
-            conda_base = base.stdout.strip()
-        except Exception:
-            conda_base = None
-
-        home = Path.home()
-        fallback_candidates = [
-            home / "miniconda3" / "envs" / self.env_name / "bin" / "python",
-            home / "anaconda3" / "envs" / self.env_name / "bin" / "python",
-            home / "mambaforge" / "envs" / self.env_name / "bin" / "python",
-            home / "miniforge3" / "envs" / self.env_name / "bin" / "python",
-            Path("/opt/conda/envs") / self.env_name / "bin" / "python",
-        ]
-        if conda_base:
-            fallback_candidates.insert(
-                0, Path(conda_base) / "envs" / self.env_name / "bin" / "python"
-            )
-        for candidate in fallback_candidates:
-            candidate_str = str(candidate)
-            if os.path.isfile(candidate_str) and os.access(candidate_str, os.X_OK):
-                return candidate_str
-
-        raise RuntimeError(
-            f"Could not resolve python executable for conda env '{self.env_name}'."
-        )
-
-    def _build_worker_env(self, env_python: str) -> Dict[str, str]:
-        env = os.environ.copy()
-
-        env_root = os.path.dirname(os.path.dirname(env_python))
-        candidate_dirs = [
-            os.path.join(env_root, "lib"),
-            os.path.join(env_root, "lib64"),
-            os.path.join(env_root, "targets", "x86_64-linux", "lib"),
-        ]
-
-        site_packages_glob = os.path.join(env_root, "lib", "python*", "site-packages")
-        site_package_dirs = [p for p in glob.glob(site_packages_glob) if os.path.isdir(p)]
-
-        for site_dir in site_package_dirs:
-            candidate_dirs.extend([
-                os.path.join(site_dir, "torch", "lib"),
-                os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib"),
-                os.path.join(site_dir, "nvidia", "cuda_nvrtc", "lib64"),
-                os.path.join(site_dir, "nvidia", "cuda_nvrtc", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "cuda_runtime", "lib"),
-                os.path.join(site_dir, "nvidia", "cuda_runtime", "lib64"),
-                os.path.join(site_dir, "nvidia", "cuda_runtime", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "cudnn", "lib"),
-                os.path.join(site_dir, "nvidia", "cudnn", "lib64"),
-                os.path.join(site_dir, "nvidia", "cudnn", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "cublas", "lib"),
-                os.path.join(site_dir, "nvidia", "cublas", "lib64"),
-                os.path.join(site_dir, "nvidia", "cublas", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "cusolver", "lib"),
-                os.path.join(site_dir, "nvidia", "cusolver", "lib64"),
-                os.path.join(site_dir, "nvidia", "cusolver", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "curand", "lib"),
-                os.path.join(site_dir, "nvidia", "curand", "lib64"),
-                os.path.join(site_dir, "nvidia", "curand", "targets", "x86_64-linux", "lib"),
-                os.path.join(site_dir, "nvidia", "cufft", "lib"),
-                os.path.join(site_dir, "nvidia", "cufft", "lib64"),
-                os.path.join(site_dir, "nvidia", "cufft", "targets", "x86_64-linux", "lib"),
-            ])
-
-        existing = env.get("LD_LIBRARY_PATH", "")
-        existing_parts = [p for p in existing.split(":") if p]
-        merged = []
-        for path in candidate_dirs + existing_parts:
-            if path and os.path.isdir(path) and path not in merged:
-                merged.append(path)
-
-        if merged:
-            env["LD_LIBRARY_PATH"] = ":".join(merged)
-
-        return env
-
     def _ensure_started(self):
         if self._thread is not None and self._thread.is_alive():
             return
@@ -375,12 +246,20 @@ class ThreadedCondaInferenceRunner:
         self._thread = None
 
     def _worker_loop(self):
-        env_python = self._resolve_env_python_executable()
-        worker_env = self._build_worker_env(env_python)
+        conda_executable = self._resolve_conda_executable()
+        conda_sh = self._resolve_conda_activation_script(conda_executable)
         cmd = [
-            env_python,
-            self.worker_script_path,
-            "--persistent",
+            "bash",
+            "-lc",
+            " && ".join([
+                f"source {shlex.quote(conda_sh)}",
+                f"conda activate {shlex.quote(self.env_name)}",
+                " ".join([
+                    "python",
+                    shlex.quote(self.worker_script_path),
+                    "--persistent",
+                ]),
+            ]),
         ]
 
         process = subprocess.Popen(
@@ -390,7 +269,6 @@ class ThreadedCondaInferenceRunner:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env=worker_env,
         )
 
         try:
