@@ -19,8 +19,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from inference_utils import base64_to_image, load_inference_input, save_inference_output
 
-
-
 def compose_transform(
     scale: torch.Tensor, rotation: torch.Tensor, translation: torch.Tensor
 ) -> Transform3d:
@@ -214,14 +212,14 @@ for idx, (chunk_image_b64, chunk_mask_b64) in enumerate(zip(chunk_images_base64,
     # # save image (numpy_array) in save dir
     # chunk_image_pil = Image.fromarray(chunk_image)
     # chunk_image_pil.save(os.path.join(save_dir, f"chunk_image_{idx}.png"))
-    
+
     reconstruction_output = sam3d_model(
         chunk_image,
         chunk_mask,
         seed=42,
-        with_mesh_postprocess=generate_texture,
-        with_texture_baking=generate_texture,
-        use_vertex_color=not generate_texture,
+        with_mesh_postprocess=False,#generate_texture,
+        with_texture_baking=False,#generate_texture,
+        use_vertex_color=True,#not generate_texture,
     )
     
     # Save posed mesh
