@@ -247,6 +247,19 @@ class ThreadedCondaInferenceRunner:
     def _worker_loop(self):
         conda_executable = self._resolve_conda_executable()
         conda_sh = self._resolve_conda_activation_script(conda_executable)
+        worker_env = os.environ.copy()
+        for key in (
+            "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
+            "PYTHONPATH",
+            "CONDA_DEFAULT_ENV",
+            "CONDA_PREFIX",
+            "CONDA_PREFIX_1",
+            "CONDA_PROMPT_MODIFIER",
+            "CONDA_SHLVL",
+            "VIRTUAL_ENV",
+        ):
+            worker_env.pop(key, None)
         cmd = [
             "bash",
             "-lc",
@@ -269,6 +282,7 @@ class ThreadedCondaInferenceRunner:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=worker_env,
         )
 
         try:
