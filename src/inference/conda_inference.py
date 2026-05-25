@@ -251,9 +251,9 @@ class ThreadedCondaInferenceRunner:
             "bash",
             "-lc",
             " && ".join([
-                "unset LD_LIBRARY_PATH",
                 f"source {shlex.quote(conda_sh)}",
                 f"conda activate {shlex.quote(self.env_name)}",
+                "export LD_LIBRARY_PATH=\"$CONDA_PREFIX/lib:$CONDA_PREFIX/lib64:${LD_LIBRARY_PATH-}\"",
                 " ".join([
                     "python",
                     shlex.quote(self.worker_script_path),
