@@ -378,15 +378,24 @@ class ThreadedCondaInferenceRunner:
         env_python = self._resolve_env_python_executable()
         worker_env = self._build_worker_env(env_python)
         conda_executable = self._resolve_conda_executable()
+        conda_sh = self._resolve_conda_activation_script(conda_executable)
+        ld_path = worker_env.get("LD_LIBRARY_PATH", "")
+        export_ld = ""
+        if ld_path:
+            export_ld = f"export LD_LIBRARY_PATH={shlex.quote(ld_path)}:$LD_LIBRARY_PATH"
         cmd = [
-            conda_executable,
-            "run",
-            "-n",
-            self.env_name,
-            "--no-capture-output",
-            "python",
-            self.worker_script_path,
-            "--persistent",
+            "bash",
+            "-lc",
+            " && ".join([
+                f"source {shlex.quote(conda_sh)}",
+                f"conda activate {shlex.quote(self.env_name)}",
+                export_ld,
+                " ".join([
+                    "python",
+                    shlex.quote(self.worker_script_path),
+                    "--persistent",
+                ]),
+            ]),
         ]
 
         process = subprocess.Popen(
@@ -396,7 +405,7 @@ class ThreadedCondaInferenceRunner:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env=worker_env,
+            env=os.environ.copy(),
         )
 
         try:
