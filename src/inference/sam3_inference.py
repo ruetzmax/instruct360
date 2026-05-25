@@ -1,6 +1,25 @@
+import os
 import sys
 import numpy as np
 from PIL import Image
+
+
+def _augment_ld_library_path():
+    candidate_dirs = [
+        os.path.join(sys.prefix, "lib"),
+        os.path.join(sys.prefix, "lib64"),
+    ]
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    existing_parts = [p for p in existing.split(":") if p]
+    merged = []
+    for path in candidate_dirs + existing_parts:
+        if path and os.path.isdir(path) and path not in merged:
+            merged.append(path)
+    if merged:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(merged)
+
+
+_augment_ld_library_path()
 
 from inference_utils import (
     base64_to_image,
