@@ -8,7 +8,6 @@ import shutil
 import queue
 import threading
 import uuid
-import glob
 import shlex
 from pathlib import Path
 from typing import Dict, Any
@@ -252,6 +251,7 @@ class ThreadedCondaInferenceRunner:
             "bash",
             "-lc",
             " && ".join([
+                "unset LD_LIBRARY_PATH",
                 f"source {shlex.quote(conda_sh)}",
                 f"conda activate {shlex.quote(self.env_name)}",
                 " ".join([
