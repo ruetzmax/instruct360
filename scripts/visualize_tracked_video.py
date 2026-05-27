@@ -11,7 +11,7 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.operations3d import adjust_pose_by_camera_pose, get_box_meshes, apply_mesh_transforms
+from src.operations3d import adjust_pose_by_camera_pose, apply_mesh_transforms
 from src.util import get_character_placeholder, trimesh_to_open3d, read_trimesh
 
 world_landmarks = []
