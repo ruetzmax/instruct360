@@ -1,8 +1,10 @@
 import base64
 import json
 import os
+from io import BytesIO
 import sys
 import numpy as np
+from PIL import Image
 
 
 def _augment_ld_library_path():
@@ -24,39 +26,28 @@ def _augment_ld_library_path():
 
 _augment_ld_library_path()
 
-import cv2
-
 
 def base64_to_image(img_str):
     img_data = base64.b64decode(img_str)
-    nparr = np.frombuffer(img_data, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
-    
-    if len(image.shape) == 2:
-        # Grayscale - convert to RGB
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-    elif image.shape[2] == 3:
-        # BGR - convert to RGB
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    elif image.shape[2] == 4:
-        # BGRA - convert to RGBA
-        image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
-    
-    return image
+    with Image.open(BytesIO(img_data)) as image:
+        if image.mode == "L":
+            return np.array(image.convert("RGB"))
+        if image.mode == "RGBA":
+            return np.array(image)
+        return np.array(image.convert("RGB"))
 
 
 def image_to_base64(image):
-    if len(image.shape) == 3 and image.shape[2] == 4:
-        # RGBA image - convert RGBA to BGRA for cv2
-        image_bgra = cv2.cvtColor(image, cv2.COLOR_RGBA2BGRA)
-        _, buffer = cv2.imencode('.png', image_bgra)
+    if len(image.shape) == 2:
+        pil_image = Image.fromarray(image.astype(np.uint8), mode="L")
+    elif len(image.shape) == 3 and image.shape[2] == 4:
+        pil_image = Image.fromarray(image.astype(np.uint8), mode="RGBA")
     else:
-        # RGB image - convert RGB to BGR for cv2
-        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        _, buffer = cv2.imencode('.png', image_bgr)
-    
-    img_str = base64.b64encode(buffer).decode('utf-8')
-    return img_str
+        pil_image = Image.fromarray(image.astype(np.uint8), mode="RGB")
+
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
 def load_inference_input():

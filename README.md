@@ -10,7 +10,7 @@ Pipeline for object capturing from omnidirectional / 360 degree input videos. In
     - [SAM3](https://github.com/facebookresearch/sam3#installation)
     - [SAM3D Objects](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md) (for CUDA 12.8+ use [these instructions](https://github.com/facebookresearch/sam-3d-objects/issues/15#issuecomment-3560650855))
     - [Depth Pro](https://github.com/facebookresearch/sam-3d-objects/blob/main/doc/setup.md)
-    - [FoundationPose](https://github.com/NVlabs/FoundationPose#env-setup-option-2-conda-local)
+    - [FoundationPose](https://github.com/NVlabs/FoundationPose#env-setup-option-2-conda-local) (for CUDA 12.8+, build PyTorch3D from source as detailed [here](https://github.com/NVlabs/FoundationPose/issues/398#issuecomment-3808312479))
 
 
 # Running the pipeline
