@@ -1,6 +1,8 @@
 # About
 Pipeline for object capturing from omnidirectional / 360 degree input videos. Includes camera pose tracking, mesh reconstruction and pose estimation.
 
+https://github.com/user-attachments/assets/f5130f4a-4aa9-4756-a370-16e632fcab64
+
 # Setup
 1. Clone the repo and cd into it
 2. `conda create -n instruct360 python=3.11.0 && conda activate instruct360`
