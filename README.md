@@ -1,3 +1,4 @@
+### [Read the Poster](./docs/instruct360_poster.pdf)
 # About
 Pipeline for object capturing from omnidirectional / 360 degree input videos. Includes camera pose tracking, mesh reconstruction and pose estimation.
 
